@@ -1,0 +1,4 @@
+starlette==0.46.1
+uvicorn==0.34.0
+typesense==1.0.3
+python-multipart==0.0.20

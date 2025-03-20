@@ -1,2 +1,3 @@
-# pers
-Persistence hunt with Typesense
+# pers (under construction)
+
+Persistence hunt with Typesense.

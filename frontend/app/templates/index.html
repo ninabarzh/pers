@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Search</title>
+</head>
+<body>
+    <h1>Search</h1>
+    <form action="/" method="GET">
+        <input type="text" name="q" placeholder="Search..." value="{{ query }}">
+        <button type="submit">Search</button>
+    </form>
+
+    <h2>Results</h2>
+    {% if results %}
+        <ul>
+            {% for hit in results.hits %}
+                <li>
+                    <strong>{{ hit.document.name }}</strong><br>
+                    <em>{{ hit.document.organisation }}</em><br>
+                    <a href="{{ hit.document.url }}" target="_blank">{{ hit.document.url }}</a><br>
+                    {{ hit.document.description }}<br>
+                    <small>Last commit: {{ hit.document.last_commit }}</small>
+                </li>
+            {% endfor %}
+        </ul>
+    {% else %}
+        <p>No results found.</p>
+    {% endif %}
+
+    <a href="/upload">Upload JSON</a>
+</body>
+</html>
