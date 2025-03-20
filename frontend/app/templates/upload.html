@@ -5,6 +5,9 @@
 </head>
 <body>
     <h1>Upload JSON</h1>
+    {% if error %}
+        <p style="color: red;">Error: {{ error }}</p>
+    {% endif %}
     <form action="/upload" method="POST" enctype="multipart/form-data">
         <input type="file" name="json_file" accept=".json">
         <button type="submit">Upload</button>

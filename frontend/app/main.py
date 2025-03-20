@@ -18,15 +18,30 @@ templates = Jinja2Templates(directory=os.path.join(os.path.dirname(__file__), "t
 async def home(request):
     query = request.query_params.get("q", "")
     results = None
+
     if query:
-        async with httpx.AsyncClient() as client:
-            response = await client.get(f"http://backend:8000/search?q={query}")
-            results = response.json()
-    return templates.TemplateResponse("index.html", {"request": request, "results": results})
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.get(f"http://backend:8000/search?q={query}")
+                if response.status_code == 200:
+                    results = response.json()
+                else:
+                    error = f"Backend error: {response.text}"
+                    logger.error(error)
+        except Exception as e:
+            error = f"Failed to connect to the backend: {str(e)}"
+            logger.error(error)
+
+    return templates.TemplateResponse(
+        "index.html",
+        {"request": request, "query": query, "results": results, "error": error},
+    )
+
 
 # Upload page
 async def upload_page(request):
     return templates.TemplateResponse("upload.html", {"request": request})
+
 
 # Handle upload
 async def handle_upload(request):
@@ -41,16 +56,26 @@ async def handle_upload(request):
         async with httpx.AsyncClient() as client:
             response = await client.post("http://backend:8000/upload", json=json_data)
             if response.status_code != 200:
-                logger.error(f"Backend error: {response.text}")  # Log backend error
-                return JSONResponse({"error": "Backend error"}, status_code=500)
+                error = f"Backend error: {response.text}"
+                logger.error(error)  # Log backend error
+                return templates.TemplateResponse(
+                    "upload.html",
+                    {"request": request, "error": error},
+                )
 
         return RedirectResponse(url="/", status_code=303)
     except json.JSONDecodeError as e:
-        logger.error(f"Invalid JSON file: {e}")  # Log JSON decode error
-        return JSONResponse({"error": "Invalid JSON file"}, status_code=400)
+        error = "Invalid JSON file. Please upload a valid JSON file."
+        logger.error(f"Invalid JSON file: {e}")
     except Exception as e:
-        logger.error(f"Error handling upload: {e}")  # Log any other error
-        return JSONResponse({"error": str(e)}, status_code=500)
+        error = f"An error occurred: {str(e)}"
+        logger.error(f"Error handling upload: {e}")
+
+    return templates.TemplateResponse(
+        "upload.html",
+        {"request": request, "error": error},
+    )
+
 
 # Routes
 routes = [
