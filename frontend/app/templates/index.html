@@ -1,9 +1,8 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Search</title>
-</head>
-<body>
+{% extends "base.html" %}
+
+{% block title %}Home - OSS Finder{% endblock %}
+
+{% block content %}
     <h1>Search</h1>
     <form action="/" method="GET">
         <input type="text" name="q" placeholder="Search..." value="{{ query }}">
@@ -11,14 +10,14 @@
     </form>
 
     {% if error %}
-        <p style="color: red;">Error: {{ error }}</p>
+        <p class="alert-danger">Error: {{ error }}</p>
     {% endif %}
 
     <h2>Results</h2>
     {% if results %}
-        <ul>
+        <ul class="results-list">
             {% for hit in results.hits %}
-                <li>
+                <li class="result-item">
                     <strong>{{ hit.document.name }}</strong><br>
                     <em>{{ hit.document.organisation }}</em><br>
                     <a href="{{ hit.document.url }}" target="_blank">{{ hit.document.url }}</a><br>
@@ -28,9 +27,9 @@
             {% endfor %}
         </ul>
     {% else %}
-        <p>No results found.</p>
+        <p class="no-results">No results found.</p>
     {% endif %}
 
-    <a href="/upload">Upload JSON</a>
-</body>
-</html>
+    <small><a href="/upload">Upload JSON</a></small>
+
+{% endblock %}

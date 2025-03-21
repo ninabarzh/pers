@@ -22,7 +22,7 @@ class TypesenseClient:
     def ensure_collection_exists(self):
         collection_name = "ossfinder"
         retries = 10  # Increase retries
-        delay = 10  # Increase delay
+        delay = 5  # Increase delay
 
         for attempt in range(retries):
             try:
@@ -59,11 +59,24 @@ class TypesenseClient:
                 if attempt == retries - 1:
                     raise e
 
+
     def search(self, query: str):
         return self.client.collections['ossfinder'].documents.search({
             'q': query,
-            'query_by': 'name,description',  # Specify fields to search
+            'query_by': 'name,description,organisation',  # Specify fields to search
         })
+
+
+    def document_exists(self, document_id: str):
+        try:
+            # Try to retrieve the document by its unique identifier (e.g., Id-repo)
+            self.client.collections['ossfinder'].documents[document_id].retrieve()
+            return True
+        except ObjectNotFound:
+            return False
+        except Exception as e:
+            logger.error(f"Error checking if document exists: {e}")
+            raise e
 
     def index_data(self, data: list):
         # Index each document individually
@@ -72,8 +85,20 @@ class TypesenseClient:
                 # Ensure `open_pull_requests` is a string
                 if "open_pull_requests" in document and not isinstance(document["open_pull_requests"], str):
                     document["open_pull_requests"] = str(document["open_pull_requests"])
+
+                # Use `Id-repo` as the document ID
+                document_id = document["Id-repo"]
+                document["id"] = document_id  # Set the primary key field
+
+                # Check if the document already exists
+                if self.document_exists(document_id):
+                    logger.debug(f"Document with ID '{document_id}' already exists. Skipping.")
+                    continue
+
+                # Add the document to the collection
                 self.client.collections['ossfinder'].documents.create(document)
                 logger.debug(f"Indexed document: {document}")
             except Exception as e:
-                logger.error(f"Error indexing document: {e}")
-                raise e
+                logger.error(f"Error indexing document {document.get('Id-repo', 'unknown')}: {e}")
+                # Continue processing other documents even if one fails
+                continue

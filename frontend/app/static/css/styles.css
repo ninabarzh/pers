@@ -1,0 +1,101 @@
+/* static/css/styles.css */
+
+/* Page body */
+.page-body {
+    font-family: Arial, sans-serif;
+    background-color: #f8f9fa;
+    color: #333;
+    margin: 0;
+    padding: 0;
+}
+
+/* Custom navbar */
+.custom-navbar {
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.custom-navbar .navbar-brand {
+    font-weight: bold;
+    color: #007bff;
+}
+
+.custom-navbar .nav-link {
+    color: #555;
+}
+
+.custom-navbar .nav-link:hover {
+    color: #007bff;
+}
+
+/* Main content */
+.main-content {
+    padding: 20px;
+    background-color: #fff;
+    border-radius: 8px;
+    margin-top: 20px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* Custom footer */
+.custom-footer {
+    text-align: center;
+    padding: 20px;
+    background-color: #f8f9fa;
+    border-top: 1px solid #ddd;
+    margin-top: 40px;
+    font-size: 0.9em;
+    color: #666;
+}
+
+.alert-danger {
+    color: red;
+}
+
+/* Error message styling */
+.error-message {
+    color: red;
+    font-weight: bold;
+}
+
+/* Results list styling */
+.results-list {
+    list-style-type: none;
+    padding: 0;
+}
+
+.result-item {
+    margin-bottom: 20px;
+    padding: 10px;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    background-color: #f9f9f9;
+}
+
+.result-item strong {
+    font-size: 1.2em;
+    color: #333;
+}
+
+.result-item em {
+    color: #555;
+}
+
+.result-item a {
+    color: #007bff;
+    text-decoration: none;
+}
+
+.result-item a:hover {
+    text-decoration: underline;
+}
+
+.result-item small {
+    color: #777;
+    font-size: 0.9em;
+}
+
+/* No results message */
+.no-results {
+    color: #777;
+    font-style: italic;
+}

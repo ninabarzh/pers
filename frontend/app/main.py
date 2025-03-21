@@ -1,6 +1,7 @@
 from starlette.applications import Starlette
-from starlette.routing import Route
-from starlette.responses import RedirectResponse, JSONResponse
+from starlette.routing import Route, Mount
+from starlette.staticfiles import StaticFiles
+from starlette.responses import RedirectResponse
 from starlette.templating import Jinja2Templates
 import httpx
 import os
@@ -14,10 +15,14 @@ logger = logging.getLogger(__name__)
 # Initialize Jinja2 templates
 templates = Jinja2Templates(directory=os.path.join(os.path.dirname(__file__), "templates"))
 
+# Define the path to the static directory
+static_dir = os.path.join(os.path.dirname(__file__), "static")
+
 # Home page (search)
 async def home(request):
     query = request.query_params.get("q", "")
     results = None
+    error = None  # Initialize `error` with a default value
 
     if query:
         try:
@@ -45,6 +50,7 @@ async def upload_page(request):
 
 # Handle upload
 async def handle_upload(request):
+    error = None  # Initialize `error` with a default value
     try:
         form_data = await request.form()
         file = form_data["json_file"].file.read()  # Read file as bytes
@@ -82,6 +88,7 @@ routes = [
     Route("/", home, methods=["GET"]),
     Route("/upload", upload_page, methods=["GET"]),
     Route("/upload", handle_upload, methods=["POST"]),
+    Mount("/static", StaticFiles(directory=static_dir), name="static"),  # Serve static files
 ]
 
 app = Starlette(debug=True, routes=routes)
