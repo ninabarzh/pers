@@ -2,3 +2,8 @@ starlette==0.46.1
 uvicorn==0.34.0
 typesense==1.0.3
 python-multipart==0.0.20
+pytest==8.3.5
+pytest-asyncio==0.25.3
+pytest-mock==3.14.0
+pytest-cov==6.0.0
+httpx==0.28.1

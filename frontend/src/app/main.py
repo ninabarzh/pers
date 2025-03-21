@@ -1,3 +1,4 @@
+# backend/src/app/main.py
 from starlette.applications import Starlette
 from starlette.routing import Route, Mount
 from starlette.staticfiles import StaticFiles

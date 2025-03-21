@@ -1,0 +1,32 @@
+# backend/pyproject.toml
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pers-backend"
+version = "0.1.0"
+description = "Backend for Pers, a TypeSense-Starlette Project"
+authors = [
+    { name = "Nina Barzh" }
+]
+dependencies = [
+    "starlette~=0.46.1",
+    "uvicorn~=0.34.0",
+    "typesense~=1.0.3",
+    "python-multipart~=0.0.20",
+    "pytest~=8.3.5",
+    "pytest-asyncio~=0.25.3",
+    "pytest-mock~=3.14.0",
+    "pytest-cov~=6.0.0",
+    "httpx~=0.28.1",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]  # Look for packages in the `src` directory
+
+[tool.pytest.ini_options]
+addopts = "-v --showlocals --cov=backend --cov-report=term-missing"
+testpaths = [
+    "tests",
+]
