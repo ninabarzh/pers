@@ -1,7 +1,9 @@
+# backend/src/app/typesense_client.py
 import typesense
 from typesense.exceptions import ObjectNotFound, ServiceUnavailable
 import time
 import logging
+import os
 
 # Initialize logging
 logging.basicConfig(level=logging.DEBUG)
@@ -10,11 +12,11 @@ logger = logging.getLogger(__name__)
 class TypesenseClient:
     def __init__(self):
         self.client = typesense.Client({
-            'api_key': 'xyz',
+            'api_key': os.getenv('TYPESENSE_API_KEY', 'xyz'),
             'nodes': [{
-                'host': 'typesense',  # Docker service name
-                'port': '8108',
-                'protocol': 'http',
+                'host': os.getenv('TYPESENSE_HOST', 'typesense'),
+                'port': os.getenv('TYPESENSE_PORT', '8108'),
+                'protocol': os.getenv('TYPESENSE_PROTOCOL', 'http'),
             }],
         })
         self.ensure_collection_exists()
@@ -59,13 +61,11 @@ class TypesenseClient:
                 if attempt == retries - 1:
                     raise e
 
-
     def search(self, query: str):
         return self.client.collections['ossfinder'].documents.search({
             'q': query,
             'query_by': 'name,description,organisation',  # Specify fields to search
         })
-
 
     def document_exists(self, document_id: str):
         try:

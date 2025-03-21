@@ -1,6 +1,8 @@
 services:
   typesense:
-    image: typesense/typesense:0.24.1
+    build:
+      context: .
+      dockerfile: ./backend/Dockerfile.typesense
     ports:
       - "8108:8108"
     environment:
@@ -18,8 +20,17 @@ services:
     build: ./backend
     ports:
       - "8000:8000"
+    volumes:
+      - ./backend:/app
     depends_on:
-      - typesense
+      typesense:
+        condition: service_healthy
+    environment:
+      - PYTHONPATH=/app/backend:/app/src
+      - TYPESENSE_HOST=typesense
+      - TYPESENSE_PORT=8108
+      - TYPESENSE_PROTOCOL=http
+      - TYPESENSE_API_KEY=xyz
 
   frontend:
     build: ./frontend

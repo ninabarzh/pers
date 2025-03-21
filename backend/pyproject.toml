@@ -26,7 +26,7 @@ dependencies = [
 where = ["src"]  # Look for packages in the `src` directory
 
 [tool.pytest.ini_options]
-addopts = "-v --showlocals --cov=backend --cov-report=term-missing"
+addopts = "-v"
 testpaths = [
     "tests",
 ]

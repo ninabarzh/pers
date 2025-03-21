@@ -1,0 +1,5 @@
+# Dockerfile.typesense
+FROM typesense/typesense:0.24.1
+
+# Install curl
+RUN apt-get update && apt-get install -y curl
