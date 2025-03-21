@@ -16,7 +16,7 @@
     <h2>Results</h2>
     {% if results %}
         <ul class="results-list">
-            {% for hit in results.hits %}
+            {% for hit in results %}
                 <li class="result-item">
                     <strong>{{ hit.document.name }}</strong><br>
                     <em>{{ hit.document.organisation }}</em><br>
@@ -26,10 +26,22 @@
                 </li>
             {% endfor %}
         </ul>
+
+        <!-- Pagination Controls -->
+        <div class="pagination">
+            {% if page > 1 %}
+                <a href="{{ url_for('home') }}?q={{ query }}&page={{ page - 1 }}&per_page={{ per_page }}" class="pagination-link">Previous</a>
+            {% endif %}
+
+            <span class="pagination-info">Page {{ page }} of {{ total_pages }}</span>
+
+            {% if page < total_pages %}
+                <a href="{{ url_for('home') }}?q={{ query }}&page={{ page + 1 }}&per_page={{ per_page }}" class="pagination-link">Next</a>
+            {% endif %}
+        </div>
     {% else %}
         <p class="no-results">No results found.</p>
     {% endif %}
-
-    <small><a href="/upload">Upload JSON</a></small>
+        <small><a href="/upload">Upload JSON</a></small>
 
 {% endblock %}

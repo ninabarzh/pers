@@ -47,14 +47,41 @@
     color: #666;
 }
 
+/* Error message styling */
 .alert-danger {
     color: red;
 }
 
-/* Error message styling */
 .error-message {
     color: red;
     font-weight: bold;
+}
+
+/* Pagination Styles */
+.pagination {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin-top: 20px;
+}
+
+.pagination-link {
+    margin: 0 10px;
+    padding: 5px 10px;
+    background-color: #007bff;
+    color: white;
+    text-decoration: none;
+    border-radius: 5px;
+}
+
+.pagination-link:hover {
+    background-color: #0056b3;
+}
+
+.pagination-info {
+    margin: 0 10px;
+    font-size: 0.9em;
+    color: #555;
 }
 
 /* Results list styling */
