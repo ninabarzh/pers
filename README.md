@@ -21,3 +21,13 @@ Down (and remove):
 ```commandline
 docker-compose down
 ```
+
+## Run the tests
+
+```commandline
+docker-compose run backend-tests
+```
+
+```commandline
+docker-compose run frontend-tests
+```

@@ -4,12 +4,15 @@
 
 {% block content %}
     <h1>Upload JSON</h1>
-    {% if error %}
-        <p class="alert-danger">Error: {{ error }}</p>
-    {% endif %}
     <form action="/upload" method="POST" enctype="multipart/form-data">
         <input type="file" name="json_file" accept=".json">
         <button type="submit">Upload</button>
     </form>
+    {% if error and request.method == 'POST' %}
+        <p class="alert-danger">{{ error }}</p>
+    {% endif %}
+    {% if success %}
+        <p class="alert-success">Upload successful!</p>
+    {% endif %}
     <small><a href="/">Back to Search</a></small>
 {% endblock %}

@@ -1,3 +1,4 @@
+# docker-compose.yml
 services:
   typesense:
     build:
@@ -57,8 +58,28 @@ services:
     container_name: frontend-app
     ports:
       - "8001:8001"
+    volumes:
+      - ./frontend/src:/app/src
+      - ./frontend/src/app/templates:/app/src/app/templates
+    environment:
+      - PYTHONPATH=/app/src
     depends_on:
       - backend
+
+  frontend-tests:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: frontend-tests
+    depends_on:
+      - backend
+      - frontend
+    volumes:
+      - ./frontend/src:/app/src
+      - ./frontend/tests:/app/tests
+    environment:
+      - PYTHONPATH=/app/src
+    command: pytest tests/
 
 volumes:
   typesense_data:

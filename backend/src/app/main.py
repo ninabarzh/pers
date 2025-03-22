@@ -14,3 +14,8 @@ routes = [
 
 # Initialize Starlette app with routes
 app = Starlette(debug=True, routes=routes)
+
+# frontend/src/app/main.py
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)

@@ -1,0 +1,34 @@
+[
+  {
+    "Id-repo": "sicopolis/sicopolis",
+    "name": "SICOPOLIS",
+    "organisation": "sicopolis",
+    "url": "https://gitlab.awi.de/sicopolis/sicopolis",
+    "website": "",
+    "description": "[SICOPOLIS](https://www.sicopolis.net) is a dynamic/thermodynamic, large-scale, 3D ice sheet model. Main features: shallow-ice/shallow-shelf approximations, polythermal ice, coded in Fortran, finite differences.",
+    "license": "GNU General Public License v3.0 only",
+    "latest_update": "",
+    "language": "",
+    "last_commit": "2024-11-06",
+    "open_pull_requests": "",
+    "master_branch": "main",
+    "is_fork": "False",
+    "forked_from": ""
+  },
+  {
+    "Id-repo": "NRAP/OpenIAM",
+    "name": "NRAP-Open-IAM",
+    "organisation": "NRAP",
+    "url": "https://gitlab.com/NRAP/OpenIAM",
+    "website": "",
+    "description": "NRAP-Open-IAM is an open-source integrated assessment model developed by National Risk Assessment Partnership during Phases II and III to facilitate risk assessment, management and containment assurance for geologic carbon sequestration projects.",
+    "license": "Other",
+    "latest_update": "2024-10-28",
+    "language": "",
+    "last_commit": "2024-10-28",
+    "open_pull_requests": "",
+    "master_branch": "master",
+    "is_fork": "False",
+    "forked_from": ""
+  }
+]

@@ -25,7 +25,11 @@ dependencies = [
 where = ["src"]  # Look for packages in the `src` directory
 
 [tool.pytest.ini_options]
-addopts = "-v --showlocals --cov=backend --cov-report=term-missing"
+addopts = "-v"
 testpaths = [
     "tests",
 ]
+# pytest-asyncio is deprecating the default behavior of the event loop scope for asynchronous fixtures.
+# In future versions, the default scope will change to function, but currently, it defaults to the fixture caching
+# scope.
+asyncio_default_fixture_loop_scope = "function"
