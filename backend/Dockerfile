@@ -7,12 +7,19 @@ ENV PYTHONPATH=/app/src
 # Set the working directory
 WORKDIR /app
 
-# Copy and install dependencies
+# Copy requirements and install dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy the application code
-COPY . .
+# Set the environment variable for pytest
+ENV PYTHONPATH=/app/src
+
+# Copy the application code and pytest configuration
+COPY src/ /app/src/
+COPY pyproject.toml /app/
+
+# Set the environment variable for pytest
+ENV PYTHONPATH=/app/src
 
 # Start the application
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

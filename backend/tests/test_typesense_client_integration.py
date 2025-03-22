@@ -2,6 +2,24 @@
 import pytest
 from app.typesense_client import TypesenseClient
 
+@pytest.fixture
+def typesense_client():
+    """
+    Fixture to provide a TypesenseClient instance.
+    Clears the collection before each test to ensure a clean state.
+    """
+    client = TypesenseClient()
+
+    # Clear the collection before each test
+    try:
+        client.client.collections['ossfinder'].delete()
+    except Exception as e:
+        print(f"Error clearing collection: {e}")
+
+    # Recreate the collection after clearing
+    client.ensure_collection_exists()
+    return client
+
 def test_ensure_collection_exists(typesense_client):
     """
     Test the ensure_collection_exists method.

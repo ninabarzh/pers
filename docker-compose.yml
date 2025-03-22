@@ -1,8 +1,9 @@
 services:
   typesense:
     build:
-      context: .
-      dockerfile: ./backend/Dockerfile.typesense
+      context: ./backend
+      dockerfile: Dockerfile.typesense
+    container_name: typesense-db
     ports:
       - "8108:8108"
     environment:
@@ -17,23 +18,43 @@ services:
       retries: 10
 
   backend:
-    build: ./backend
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: backend-app
     ports:
       - "8000:8000"
     volumes:
-      - ./backend:/app
-    depends_on:
-      typesense:
-        condition: service_healthy
+      - ./backend/src:/app/src
     environment:
       - PYTHONPATH=/app/backend:/app/src
       - TYPESENSE_HOST=typesense
       - TYPESENSE_PORT=8108
       - TYPESENSE_PROTOCOL=http
       - TYPESENSE_API_KEY=xyz
+    depends_on:
+      typesense:
+        condition: service_healthy
+
+  # Add a service for running tests
+  backend-tests:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: backend-tests
+    depends_on:
+      - backend
+      - typesense
+    volumes:
+      - ./backend/src:/app/src
+      - ./backend/tests:/app/tests
+    command: pytest tests/
 
   frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: frontend-app
     ports:
       - "8001:8001"
     depends_on:
