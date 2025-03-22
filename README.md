@@ -49,6 +49,7 @@ docker-compose run frontend-tests
 - [x] Add CSS to make the frontend more visually appealing.
 - [x] Refactoring (1)
 - [x] Improve the dockers' robustness.
+- [ ] Relevancy ranking.
 - [ ] Add filters to narrow down search results (e.g., filter by organisation or license).
 - [ ] Use Typesense's highlighting feature to highlight search terms in the results.
 - [ ] Add user authentication to restrict access to the upload page.
@@ -57,9 +58,9 @@ docker-compose run frontend-tests
 - [ ] Consider scaling Typesense horizontally by adding more nodes to the cluster.
 - [ ] Set up regular backups of the Typesense data directory to ensure data safety.
 - [ ] Add monitoring and alerting for Typesense to track performance and detect issues early.
-- [ ] Facets
-- [ ] Create a new index page
-- [ ] When uploading a .json file as index, be able to choose which index
+- [ ] Facets.
+- [ ] Create a new index page with user authentication.
+- [ ] When uploading a `.json` file as index, be able to choose which index to upload to.
 
 ## Production
 
