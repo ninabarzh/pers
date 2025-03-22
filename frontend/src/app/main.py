@@ -2,6 +2,7 @@
 from starlette.applications import Starlette
 from starlette.routing import Route, Mount
 from starlette.staticfiles import StaticFiles
+from starlette.responses import JSONResponse
 import os
 from .routes.home import home
 from .routes.upload import upload_page, handle_upload
@@ -9,9 +10,13 @@ from .routes.upload import upload_page, handle_upload
 # Define the path to the static directory
 static_dir = os.path.join(os.path.dirname(__file__), "static")
 
+# Health check endpoint
+async def health_check(request):
+    return JSONResponse({"status": "healthy"})
 
 # Routes
 routes = [
+    Route("/health", health_check),
     Route("/", home, methods=["GET"]),
     Route("/upload", upload_page, methods=["GET"]),
     Route("/upload", handle_upload, methods=["POST"]),

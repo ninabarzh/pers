@@ -8,8 +8,8 @@ services:
     ports:
       - "8108:8108"
     environment:
-      - TYPESENSE_API_KEY=xyz
-      - TYPESENSE_DATA_DIR=/data
+      - TYPESENSE_API_KEY=${TYPESENSE_API_KEY}
+      - TYPESENSE_DATA_DIR=${TYPESENSE_DATA_DIR}
     volumes:
       - typesense_data:/data
     healthcheck:
@@ -17,6 +17,9 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
+    restart: unless-stopped
+    networks:
+      - app-network
 
   backend:
     build:
@@ -24,11 +27,11 @@ services:
       dockerfile: Dockerfile
     container_name: backend-app
     ports:
-      - "8000:8000"
+      - "${BACKEND_PORT}:8000"
     volumes:
       - ./backend/src:/app/src
     environment:
-      - PYTHONPATH=/app/backend:/app/src
+      - PYTHONPATH=${BACKEND_PYTHONPATH}
       - TYPESENSE_HOST=typesense
       - TYPESENSE_PORT=8108
       - TYPESENSE_PROTOCOL=http
@@ -36,20 +39,31 @@ services:
     depends_on:
       typesense:
         condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - app-network
 
   # Add a service for running tests
   backend-tests:
+    profiles: ["test"]
     build:
       context: ./backend
       dockerfile: Dockerfile
     container_name: backend-tests
     depends_on:
-      - backend
-      - typesense
+      backend:
+        condition: service_healthy
+      typesense:
+        condition: service_healthy
     volumes:
       - ./backend/src:/app/src
       - ./backend/tests:/app/tests
-    command: pytest tests/
+    command: ["./run_tests.sh"]
+    environment:
+      - TEST_ENV=development
+      - DEBUG=true
+    networks:
+      - app-network
 
   frontend:
     build:
@@ -57,29 +71,47 @@ services:
       dockerfile: Dockerfile
     container_name: frontend-app
     ports:
-      - "8001:8001"
+      - "${FRONTEND_PORT}:8001"
     volumes:
       - ./frontend/src:/app/src
       - ./frontend/src/app/templates:/app/src/app/templates
     environment:
-      - PYTHONPATH=/app/src
+      - PYTHONPATH=${FRONTEND_PYTHONPATH}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
     depends_on:
       - backend
+    restart: unless-stopped
+    networks:
+      - app-network
 
   frontend-tests:
+    profiles: ["test"]
     build:
       context: ./frontend
       dockerfile: Dockerfile
     container_name: frontend-tests
     depends_on:
-      - backend
-      - frontend
+      backend:
+        condition: service_healthy
+      frontend:
+        condition: service_healthy
     volumes:
       - ./frontend/src:/app/src
       - ./frontend/tests:/app/tests
+    command: ["./run_tests.sh"]
     environment:
-      - PYTHONPATH=/app/src
-    command: pytest tests/
+      - TEST_ENV=development
+      - DEBUG=true
+    networks:
+      - app-network
 
 volumes:
   typesense_data:
+
+networks:
+  app-network:
+    driver: bridge

@@ -12,9 +12,9 @@ The first index is made from OSSFinder scraped data, also see [oss4climate](http
 
 ## Build and run the containers
 
-Up (detached `-d`):
+Development:
 ```commandline
-docker-compose up -d --build
+docker-compose --env-file .env.dev up
 ```
 
 Down (and remove):
@@ -23,6 +23,12 @@ docker-compose down
 ```
 
 ## Run the tests
+
+To run services with the test profile:
+
+```commandline
+docker-compose --profile test up
+```
 
 ```commandline
 docker-compose run backend-tests

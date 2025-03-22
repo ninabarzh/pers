@@ -1,4 +1,13 @@
 # backend/src/app/routes/upload.py
+"""
+This function is an asynchronous handler for the /upload endpoint.
+It reads the request body, decodes it, and parses it as JSON.
+It validates that the parsed data is a list (since Typesense typically expects a list of documents for indexing).
+If the data is valid, it indexes the data using the TypesenseClient.
+It handles specific errors like invalid JSON and general exceptions, returning appropriate error responses.
+A logger is set up for debugging and error logging.
+"""
+
 import json
 import logging
 from starlette.responses import JSONResponse

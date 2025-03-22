@@ -1,22 +1,39 @@
 # frontend/Dockerfile
+# Use the official Python 3.12 slim image as the base
 FROM python:3.12-slim
 
-# Set working directory
+# Set environment variables
+ENV PYTHONPATH=/app/src \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1
+
+# Set the working directory
 WORKDIR /app
 
-# Copy requirements and install dependencies
+# Install system dependencies (if needed)
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends curl && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+# Copy and install Python dependencies
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
 
-# Set the environment variable for pytest
-ENV PYTHONPATH=/app/src
-
-# Copy the application code and pytest configuration
+# Copy the application code and test files
 COPY src/ /app/src/
+COPY tests/ /app/tests/
 COPY pyproject.toml /app/
+COPY run_tests.sh /app/
 
-# Copy test.json to /app/tests/
-COPY tests/test.json /app/tests/test.json
+# Create a non-root user and switch to it
+RUN useradd -m myuser && \
+    chown -R myuser:myuser /app  # Change ownership of /app
+USER myuser
+
+# Expose the port the app runs on
+EXPOSE 8001
 
 # Command to run the application (default)
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8001"]
