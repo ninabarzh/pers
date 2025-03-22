@@ -10,11 +10,12 @@ A project started at the
 
 The first index is made from OSSFinder scraped data, also see [oss4climate](https://github.com/Pierre-VF/oss4climate).
 
-## Build and run the containers
+## Development
 
-Development:
+### Build and run the containers
+
 ```commandline
-docker-compose --env-file .env.dev up
+docker-compose up
 ```
 
 Down (and remove):
@@ -22,7 +23,7 @@ Down (and remove):
 docker-compose down
 ```
 
-## Run the tests
+### Run the tests
 
 To run services with the test profile:
 
@@ -36,4 +37,52 @@ docker-compose run backend-tests
 
 ```commandline
 docker-compose run frontend-tests
+```
+
+### Roadmap
+
+- [x] Typesense, backend and frontend dockers.
+- [x] Upload and search routes.
+- [x] Set up test framework and first tests.
+- [x] Add pagination to handle large result sets. Typesense supports pagination via the page and per_page parameters.
+- [x] Improve error handling in the frontend to display user-friendly error messages.
+- [x] Add CSS to make the frontend more visually appealing.
+- [x] Refactoring (1)
+- [x] Improve the dockers' robustness.
+- [ ] Add filters to narrow down search results (e.g., filter by organisation or license).
+- [ ] Use Typesense's highlighting feature to highlight search terms in the results.
+- [ ] Add user authentication to restrict access to the upload page.
+- [ ] Refactoring (2)
+- [ ] Deploy the application to Hetzner.
+- [ ] Consider scaling Typesense horizontally by adding more nodes to the cluster.
+- [ ] Set up regular backups of the Typesense data directory to ensure data safety.
+- [ ] Add monitoring and alerting for Typesense to track performance and detect issues early.
+- [ ] Facets
+- [ ] Create a new index page
+- [ ] When uploading a .json file as index, be able to choose which index
+
+## Production
+
+Build the production images:
+
+```commandline
+docker-compose -f docker-compose.prod.yml build
+```
+
+Start the production services:
+
+```commandline
+docker-compose -f docker-compose.prod.yml --env-file .env.prod up -d
+```
+
+Stop the production services:
+
+```commandline
+docker-compose -f docker-compose.prod.yml down
+```
+    
+View Logs:
+
+```commandline
+docker-compose -f docker-compose.prod.yml logs -f
 ```

@@ -1,0 +1,73 @@
+services:
+  typesense:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.typesense
+    container_name: typesense-db
+    ports:
+      - "8108:8108"
+    environment:
+      - TYPESENSE_API_KEY=${TYPESENSE_API_KEY}
+      - TYPESENSE_DATA_DIR=${TYPESENSE_DATA_DIR}
+    volumes:
+      - typesense_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8108/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+    restart: always
+    networks:
+      - app-network
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.prod
+    container_name: backend-app
+    ports:
+      - "${BACKEND_PORT}:8000"
+    environment:
+      - PYTHONPATH=/app/src
+      - TYPESENSE_HOST=typesense
+      - TYPESENSE_PORT=8108
+      - TYPESENSE_PROTOCOL=http
+      - TYPESENSE_API_KEY=${TYPESENSE_API_KEY}
+    depends_on:
+      typesense:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+    restart: always
+    networks:
+      - app-network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.prod
+    container_name: frontend-app
+    ports:
+      - "${FRONTEND_PORT}:8001"
+    environment:
+      - PYTHONPATH=/app/src
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+    depends_on:
+      - backend
+    restart: always
+    networks:
+      - app-network
+
+volumes:
+  typesense_data:
+
+networks:
+  app-network:
+    driver: bridge
