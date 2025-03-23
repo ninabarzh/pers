@@ -9,12 +9,12 @@ from .routes.upload import upload_page, handle_upload
 from dotenv import load_dotenv
 import os
 
-# Load .env or .env.prod based on the ENV variable
+# Load .env.dev or .env.prod based on the ENV variable
 env = os.getenv('ENV', 'development')
 if env == 'production':
     load_dotenv('../.env.prod')
 else:
-    load_dotenv('../.env')
+    load_dotenv('../.env.dev')
 
 # Access environment variables
 FRONTEND_PORT = os.getenv('FRONTEND_PORT')

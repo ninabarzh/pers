@@ -5,12 +5,12 @@ import time
 import logging
 import os
 
-# Load .env or .env.prod based on the ENV variable
+# Load .env.dev or .env.prod based on the ENV variable
 env = os.getenv('ENV', 'development')
 if env == 'production':
     load_dotenv('../.env.prod')
 else:
-    load_dotenv('../.env')
+    load_dotenv('../.env.dev')
 
 # Access environment variables with defaults or raise an error if missing
 TYPESENSE_API_KEY = os.getenv('TYPESENSE_API_KEY')
@@ -20,11 +20,11 @@ TYPESENSE_PROTOCOL = os.getenv('TYPESENSE_PROTOCOL', 'http')  # Default to 'http
 
 # Validate required environment variables
 if not TYPESENSE_API_KEY:
-    raise ValueError("TYPESENSE_API_KEY is missing. Check your .env file.")
+    raise ValueError("TYPESENSE_API_KEY is missing. Check your .env.dev files.")
 if not TYPESENSE_HOST:
-    raise ValueError("TYPESENSE_HOST is missing. Check your .env file.")
+    raise ValueError("TYPESENSE_HOST is missing. Check your .env.dev files.")
 if not TYPESENSE_PORT:
-    raise ValueError("TYPESENSE_PORT is missing. Check your .env file.")
+    raise ValueError("TYPESENSE_PORT is missing. Check your .env.dev files.")
 
 # Initialize logging
 logging.basicConfig(level=logging.DEBUG)

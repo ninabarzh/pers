@@ -29,8 +29,9 @@ COPY backend/pyproject.toml /app/
 COPY backend/tests/ /app/tests/
 COPY backend/run_tests.sh /app/
 
-# Copy the .env file from the root directory
-COPY .env .env
+# Copy the .env.dev file from the root directory
+COPY .env.dev .env.dev
+COPY .env.prod .en.prod
 
 # Create a non-root user and switch to it
 RUN useradd -m myuser && \

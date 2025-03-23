@@ -1,11 +1,13 @@
 # docker-compose.yml
 services:
+  # Typesense service (used in both dev and prod)
   typesense:
     build:
       context: .
       dockerfile: backend/Dockerfile.typesense
     env_file:
-      - .env  # Load .env file for environment variables
+      - .env.dev  # Development environment variables
+      - .env.prod # Production environment variables (overrides .env.dev)
     container_name: typesense-db
     ports:
       - "${TYPESENSE_PORT}:8108"
@@ -23,23 +25,25 @@ services:
     networks:
       - app-network
 
+  # Backend service (used in both dev and prod)
   backend:
     build:
       context: .
       dockerfile: backend/Dockerfile
     env_file:
-      - .env  # Load .env file for environment variables
+      - .env.dev  # Development environment variables
+      - .env.prod # Production environment variables (overrides .env.dev)
     container_name: backend-app
     ports:
       - "${BACKEND_PORT}:8000"
     volumes:
-      - ./backend/src:/app/src
+      - ./backend/src:/app/src  # Bind mount for development
     environment:
       - PYTHONPATH=${BACKEND_PYTHONPATH}
       - TYPESENSE_HOST=typesense
       - TYPESENSE_PORT=8108
       - TYPESENSE_PROTOCOL=http
-      - TYPESENSE_API_KEY=xyz
+      - TYPESENSE_API_KEY=${TYPESENSE_API_KEY}
     depends_on:
       typesense:
         condition: service_healthy
@@ -47,42 +51,19 @@ services:
     networks:
       - app-network
 
-  # Add a service for running tests
-  backend-tests:
-    profiles: ["test"]
-    build:
-      context: .
-      dockerfile: backend/Dockerfile
-    container_name: backend-tests
-    depends_on:
-      backend:
-        condition: service_healthy
-      typesense:
-        condition: service_healthy
-    volumes:
-      - ./backend/src:/app/src
-      - ./backend/tests:/app/tests
-    env_file:
-      - .env  # Load .env file for environment variables
-    environment:
-      - TEST_ENV=development
-      - DEBUG=true
-    command: ["./run_tests.sh"]
-    networks:
-      - app-network
-
+  # Frontend service (used in both dev and prod)
   frontend:
     build:
       context: .
       dockerfile: frontend/Dockerfile
     env_file:
-      - .env  # Load .env file for environment variables
+      - .env.dev  # Development environment variables
+      - .env.prod # Production environment variables (overrides .env.dev)
     container_name: frontend-app
     ports:
       - "${FRONTEND_PORT}:8001"
     volumes:
-      - ./frontend/src:/app/src
-      - ./frontend/src/app/templates:/app/src/app/templates
+      - ./frontend/src:/app/src  # Bind mount for development
     environment:
       - PYTHONPATH=${FRONTEND_PYTHONPATH}
     healthcheck:
@@ -96,8 +77,51 @@ services:
     networks:
       - app-network
 
+  # Nginx reverse proxy (production only)
+  nginx:
+    profiles: ["production"]
+    image: nginx:latest
+    container_name: nginx-proxy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf  # Mount Nginx configuration
+      - /etc/letsencrypt/live/finder.green/fullchain.pem:/etc/nginx/certs/fullchain.pem  # Mount SSL certificate
+      - /etc/letsencrypt/live/finder.green/privkey.pem:/etc/nginx/certs/privkey.pem  # Mount SSL private key
+    depends_on:
+      - backend
+      - frontend
+    networks:
+      - app-network
+
+  # Backend tests (development only)
+  backend-tests:
+    profiles: ["development"]
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: backend-tests
+    depends_on:
+      backend:
+        condition: service_healthy
+      typesense:
+        condition: service_healthy
+    volumes:
+      - ./backend/src:/app/src
+      - ./backend/tests:/app/tests
+    env_file:
+      - .env.dev
+    environment:
+      - TEST_ENV=development
+      - DEBUG=true
+    command: ["./run_tests.sh"]
+    networks:
+      - app-network
+
+  # Frontend tests (development only)
   frontend-tests:
-    profiles: ["test"]
+    profiles: ["development"]
     build:
       context: .
       dockerfile: frontend/Dockerfile
@@ -111,7 +135,7 @@ services:
       - ./frontend/src:/app/src
       - ./frontend/tests:/app/tests
     env_file:
-      - .env  # Load .env file for environment variables
+      - .env.dev
     environment:
       - TEST_ENV=development
       - DEBUG=true
