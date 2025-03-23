@@ -1,0 +1,30 @@
+name: Deploy to Hetzner
+
+on:
+  push:
+    branches:
+      - main  # Trigger on pushes to the main branch
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Checkout the code
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      # Set up SSH key using webfactory/ssh-agent
+      - name: Set up SSH key
+        uses: webfactory/ssh-agent@v0.7.0
+        with:
+          ssh-private-key: ${{ secrets.HETZNER_SSH_KEY }}
+
+      # Deploy to Hetzner
+      - name: Deploy to Hetzner
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ secrets.HETZNER_USER }}@${{ secrets.HETZNER_SERVER_IP }} << 'ENDSSH'
+            cd /opt/pers
+            git pull origin main
+            sudo docker-compose --env-file .env.prod --profile production up -d --build
+          ENDSSH
