@@ -31,6 +31,11 @@ async def upload(request: Request):
         if not isinstance(data, list):
             return JSONResponse({"error": "Expected a list of documents"}, status_code=400)
 
+        # Validate that each document has the required fields
+        for document in data:
+            if "Id-repo" not in document:
+                return JSONResponse({"error": "Missing 'Id-repo' field in document"}, status_code=400)
+
         # Index the data
         typesense_client.index_data(data)
         return JSONResponse({"status": "success"})

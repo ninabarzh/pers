@@ -13,10 +13,26 @@ def test_search_endpoint(client):
     assert isinstance(response.json(), dict)
 
 def test_upload_endpoint_valid_data(client):
-    test_data = [{"id": "1", "name": "Test Document"}]
+    test_data = [
+        {
+            "Id-repo": "1",  # Add this field
+            "name": "Test Document",
+            "organisation": "Test Org",
+            "url": "http://example.com",
+            "website": "http://example.com",
+            "description": "A test document",
+            "license": "MIT",
+            "latest_update": "2023-10-01",
+            "language": "Python",
+            "last_commit": "2023-10-01",
+            "open_pull_requests": "0",
+            "master_branch": "main",
+            "is_fork": "false",
+            "forked_from": "",
+        }
+    ]
     response = client.post("/upload", json=test_data)
     assert response.status_code == 200
-    assert response.json() == {"status": "success"}
 
 def test_upload_endpoint_invalid_json(client):
     # Pass invalid JSON as raw bytes

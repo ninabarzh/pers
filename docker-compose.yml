@@ -2,11 +2,13 @@
 services:
   typesense:
     build:
-      context: ./backend
-      dockerfile: Dockerfile.typesense
+      context: .
+      dockerfile: backend/Dockerfile.typesense
+    env_file:
+      - .env  # Load .env file for environment variables
     container_name: typesense-db
     ports:
-      - "8108:8108"
+      - "${TYPESENSE_PORT}:8108"
     environment:
       - TYPESENSE_API_KEY=${TYPESENSE_API_KEY}
       - TYPESENSE_DATA_DIR=${TYPESENSE_DATA_DIR}
@@ -23,8 +25,10 @@ services:
 
   backend:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: backend/Dockerfile
+    env_file:
+      - .env  # Load .env file for environment variables
     container_name: backend-app
     ports:
       - "${BACKEND_PORT}:8000"
@@ -47,8 +51,8 @@ services:
   backend-tests:
     profiles: ["test"]
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: backend/Dockerfile
     container_name: backend-tests
     depends_on:
       backend:
@@ -58,17 +62,21 @@ services:
     volumes:
       - ./backend/src:/app/src
       - ./backend/tests:/app/tests
-    command: ["./run_tests.sh"]
+    env_file:
+      - .env  # Load .env file for environment variables
     environment:
       - TEST_ENV=development
       - DEBUG=true
+    command: ["./run_tests.sh"]
     networks:
       - app-network
 
   frontend:
     build:
-      context: ./frontend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: frontend/Dockerfile
+    env_file:
+      - .env  # Load .env file for environment variables
     container_name: frontend-app
     ports:
       - "${FRONTEND_PORT}:8001"
@@ -91,8 +99,8 @@ services:
   frontend-tests:
     profiles: ["test"]
     build:
-      context: ./frontend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: frontend/Dockerfile
     container_name: frontend-tests
     depends_on:
       backend:
@@ -102,10 +110,12 @@ services:
     volumes:
       - ./frontend/src:/app/src
       - ./frontend/tests:/app/tests
-    command: ["./run_tests.sh"]
+    env_file:
+      - .env  # Load .env file for environment variables
     environment:
       - TEST_ENV=development
       - DEBUG=true
+    command: ["./run_tests.sh"]
     networks:
       - app-network
 

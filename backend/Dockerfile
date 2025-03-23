@@ -17,14 +17,20 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 # Copy and install Python dependencies
-COPY requirements.txt .
+COPY backend/requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
 # Copy the application code
-COPY src/ /app/src/
-COPY pyproject.toml /app/
-COPY run_tests.sh /app/
+COPY backend/src/ /app/src/
+COPY backend/pyproject.toml /app/
+
+# Copy test files
+COPY backend/tests/ /app/tests/
+COPY backend/run_tests.sh /app/
+
+# Copy the .env file from the root directory
+COPY .env .env
 
 # Create a non-root user and switch to it
 RUN useradd -m myuser && \

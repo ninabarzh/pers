@@ -15,7 +15,8 @@ The first index is made from OSSFinder scraped data, also see [oss4climate](http
 ### Build and run the containers
 
 ```commandline
-docker-compose up
+docker-compose up -d  # Uses docker-compose.yml by default
+
 ```
 
 Down (and remove):

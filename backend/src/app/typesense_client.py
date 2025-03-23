@@ -1,9 +1,30 @@
-# backend/src/app/typesense_client.py
 import typesense
-from typesense.exceptions import ObjectNotFound, ServiceUnavailable
+from typesense.exceptions import ObjectNotFound, ServiceUnavailable, TypesenseClientError
+from dotenv import load_dotenv
 import time
 import logging
 import os
+
+# Load .env or .env.prod based on the ENV variable
+env = os.getenv('ENV', 'development')
+if env == 'production':
+    load_dotenv('../.env.prod')
+else:
+    load_dotenv('../.env')
+
+# Access environment variables with defaults or raise an error if missing
+TYPESENSE_API_KEY = os.getenv('TYPESENSE_API_KEY')
+TYPESENSE_HOST = os.getenv('TYPESENSE_HOST')
+TYPESENSE_PORT = os.getenv('TYPESENSE_PORT')
+TYPESENSE_PROTOCOL = os.getenv('TYPESENSE_PROTOCOL', 'http')  # Default to 'http' if not set
+
+# Validate required environment variables
+if not TYPESENSE_API_KEY:
+    raise ValueError("TYPESENSE_API_KEY is missing. Check your .env file.")
+if not TYPESENSE_HOST:
+    raise ValueError("TYPESENSE_HOST is missing. Check your .env file.")
+if not TYPESENSE_PORT:
+    raise ValueError("TYPESENSE_PORT is missing. Check your .env file.")
 
 # Initialize logging
 logging.basicConfig(level=logging.DEBUG)
@@ -11,25 +32,32 @@ logger = logging.getLogger(__name__)
 
 class TypesenseClient:
     def __init__(self):
+        """
+        Initialize the Typesense client and ensure the collection exists.
+        """
         self.client = typesense.Client({
-            'api_key': os.getenv('TYPESENSE_API_KEY', 'xyz'),
+            'api_key': TYPESENSE_API_KEY,
             'nodes': [{
-                'host': os.getenv('TYPESENSE_HOST', 'typesense'),
-                'port': os.getenv('TYPESENSE_PORT', '8108'),
-                'protocol': os.getenv('TYPESENSE_PROTOCOL', 'http'),
+                'host': TYPESENSE_HOST,
+                'port': TYPESENSE_PORT,
+                'protocol': TYPESENSE_PROTOCOL,
             }],
         })
         self.ensure_collection_exists()
 
     def ensure_collection_exists(self):
+        """
+        Ensure the ossfinder collection exists in Typesense. If it doesn't, create it with a predefined schema.
+        Retry Mechanism: Retries up to 10 times with a 5-second delay between attempts if Typesense is unavailable.
+        """
         collection_name = "ossfinder"
-        retries = 10  # Increase retries
-        delay = 5  # Increase delay
+        retries = 10
+        delay = 5
 
         for attempt in range(retries):
             try:
                 self.client.collections[collection_name].retrieve()
-                logger.debug(f"Collection '{collection_name}' exists.")
+                logger.info(f"Collection '{collection_name}' exists.")
                 return
             except ObjectNotFound:
                 # Create the collection if it doesn't exist
@@ -53,33 +81,49 @@ class TypesenseClient:
                     ],
                 }
                 self.client.collections.create(schema)
-                logger.debug(f"Collection '{collection_name}' created.")
+                logger.info(f"Collection '{collection_name}' created.")
                 return
             except ServiceUnavailable as e:
                 logger.warning(f"Typesense not ready. Retrying in {delay} seconds... (Attempt {attempt + 1}/{retries})")
                 time.sleep(delay)
                 if attempt == retries - 1:
+                    logger.error(f"Failed to connect to Typesense after {retries} attempts.")
                     raise e
 
     def search(self, query: str):
-        return self.client.collections['ossfinder'].documents.search({
-            'q': query,
-            'query_by': 'name,description,organisation',  # Specify fields to search
-        })
+        """
+        Search the ossfinder collection for documents matching the provided query.
+        Query Fields: The search is performed on the name, description, and organisation fields.
+        """
+        try:
+            return self.client.collections['ossfinder'].documents.search({
+                'q': query,
+                'query_by': 'name,description,organisation',  # Specify fields to search
+            })
+        except TypesenseClientError as e:
+            logger.error(f"Error searching for query '{query}': {e}")
+            raise e
 
     def document_exists(self, document_id: str):
+        """
+        Check if a document with the specified document_id exists in the ossfinder collection.
+        """
         try:
-            # Try to retrieve the document by its unique identifier (e.g., Id-repo)
             self.client.collections['ossfinder'].documents[document_id].retrieve()
             return True
         except ObjectNotFound:
             return False
-        except Exception as e:
+        except TypesenseClientError as e:
             logger.error(f"Error checking if document exists: {e}")
             raise e
 
     def index_data(self, data: list):
-        # Index each document individually
+        """
+        Index a list of documents into the ossfinder collection.
+        Document ID: Uses Id-repo as the unique identifier for each document.
+        Data Validation: Ensures open_pull_requests is a string.
+        Error Handling: Logs errors for individual documents but continues processing the remaining documents.
+        """
         for document in data:
             try:
                 # Ensure `open_pull_requests` is a string
@@ -97,8 +141,8 @@ class TypesenseClient:
 
                 # Add the document to the collection
                 self.client.collections['ossfinder'].documents.create(document)
-                logger.debug(f"Indexed document: {document}")
-            except Exception as e:
+                logger.info(f"Indexed document: {document}")
+            except TypesenseClientError as e:
                 logger.error(f"Error indexing document {document.get('Id-repo', 'unknown')}: {e}")
                 # Continue processing other documents even if one fails
                 continue
