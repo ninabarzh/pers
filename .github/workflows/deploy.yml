@@ -34,7 +34,7 @@ jobs:
       # Deploy to Hetzner
       - name: Deploy to Hetzner
         run: |
-          rsync -avz --delete --exclude=".git" --exclude="node_modules" ./ deploy@${{ secrets.HETZNER_SERVER_IP }}:/opt/pers/ || exit 1
+          rsync -avz --delete --exclude=".git" --exclude="node_modules" --exclude=".env*" ./ deploy@${{ secrets.HETZNER_SERVER_IP }}:/opt/pers/ || exit 1
           ssh -o StrictHostKeyChecking=no deploy@${{ secrets.HETZNER_SERVER_IP }} << 'ENDSSH'
             cd /opt/pers
             docker-compose --env-file .env.prod --profile production up -d --build || exit 1
