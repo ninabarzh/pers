@@ -14,6 +14,12 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
+      # Add server to known hosts
+      - name: Add server to known hosts
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.HETZNER_SERVER_FINGERPRINT }}" >> ~/.ssh/known_hosts
+
       # Set up SSH key using webfactory/ssh-agent
       - name: Set up SSH key
         uses: webfactory/ssh-agent@v0.7.0
@@ -23,8 +29,8 @@ jobs:
       # Deploy to Hetzner
       - name: Deploy to Hetzner
         run: |
-          ssh -o StrictHostKeyChecking=no ${{ secrets.HETZNER_USER }}@${{ secrets.HETZNER_SERVER_IP }} << 'ENDSSH'
+          rsync -avz --delete --exclude=".git" --exclude="node_modules" ./ deploy@${{ secrets.HETZNER_SERVER_IP }}:/opt/pers/ || exit 1
+          ssh -o StrictHostKeyChecking=no deploy@${{ secrets.HETZNER_SERVER_IP }} << 'ENDSSH'
             cd /opt/pers
-            git pull origin main
-            sudo docker-compose --env-file .env.prod --profile production up -d --build
+            docker-compose --env-file .env.prod --profile production up -d --build || exit 1
           ENDSSH
