@@ -31,11 +31,22 @@ jobs:
         run: |
           ssh -o StrictHostKeyChecking=no deploy@${{ secrets.HETZNER_SERVER_IP }} "echo 'SSH connection successful'"
 
-      # Deploy to Hetzner
+      - name: Backup .env files
+        run: |
+          ssh -o StrictHostKeyChecking=no deploy@${{ secrets.HETZNER_SERVER_IP }} << 'ENDSSH'
+            cd /opt/pers
+            cp .env.prod .env.prod.bak
+            cp .env.dev .env.dev.bak
+          ENDSSH
+
       - name: Deploy to Hetzner
         run: |
           rsync -avz --delete --exclude=".git" --exclude="node_modules" --exclude=".env*" ./ deploy@${{ secrets.HETZNER_SERVER_IP }}:/opt/pers/ || exit 1
+
+      - name: Restore .env files
+        run: |
           ssh -o StrictHostKeyChecking=no deploy@${{ secrets.HETZNER_SERVER_IP }} << 'ENDSSH'
             cd /opt/pers
-            docker-compose --env-file .env.prod --profile production up -d --build || exit 1
+            mv .env.prod.bak .env.prod
+            mv .env.dev.bak .env.dev
           ENDSSH
