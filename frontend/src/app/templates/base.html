@@ -4,29 +4,41 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Green Finder{% endblock %}</title>
+    <!-- Bootstrap CSS FIRST -->
     <link rel="stylesheet" href="{{ url_for('static', path='css/bootstrap.min.css') }}">
+
+    <!-- THEN your custom CSS -->
     <link rel="stylesheet" href="{{ url_for('static', path='css/styles.css') }}">
+
+    <!-- Bootstrap Icons LAST -->
+    <link rel="stylesheet" href="{{ url_for('static', path='fonts/bootstrap-icons.css') }}">
     {% block extra_css %}{% endblock %}
 </head>
 <body class="page-body">
+
     <!-- Navigation Bar -->
-    <nav class="navbar navbar-expand-lg navbar-light bg-light custom-navbar">
-        <div class="container-fluid">
-            <a class="navbar-brand" href="/">Green Finder</a>
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
-                <span class="navbar-toggler-icon"></span>
-            </button>
-            <div class="collapse navbar-collapse" id="navbarNav">
-                <ul class="navbar-nav">
-                    <li class="nav-item">
-                        <a class="nav-link" href="/">Home</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="/upload">Upload</a>
-                    </li>
-                </ul>
-            </div>
+    <nav class="navbar navbar-expand-lg navbar-light bg-light">
+      <div class="container-fluid">
+        <a class="navbar-brand" href="#">Find Greener</a>
+        <button class="navbar-toggler" type="button"
+                data-bs-toggle="collapse"
+                data-bs-target="#navbarContent"
+                aria-controls="navbarContent"
+                aria-expanded="false"
+                aria-label="Toggle navigation">
+          <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="navbarContent">
+          <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+            <li class="nav-item">
+              <a class="nav-link" href="/">Home</a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link" href="/upload">Upload</a>
+            </li>
+          </ul>
         </div>
+      </div>
     </nav>
 
     <!-- Main Content -->
@@ -36,10 +48,24 @@
 
     <!-- Footer -->
     <footer class="footer custom-footer">
-        <p>&copy; 2025 OSS Finder. No rights reserved. Whatsoever.</p>
+      <div class="container">
+        <div class="footer-content">
+          <div class="footer-links">
+            <a href="/about">About</a>
+            <a href="/privacy">Privacy Policy</a>
+            <a href="/terms">Terms of Service</a>
+            <a href="/contact">Contact</a>
+          </div>
+          <div class="footer-copyright">
+            <i class="bi bi-c-circle"></i>
+            <span>2025 Made with love</span>
+          </div>
+        </div>
+      </div>
     </footer>
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+    <script src="{{ url_for('static', path='js/bootstrap.bundle.min.js') }}"></script>
     {% block extra_js %}{% endblock %}
 </body>
 </html>
