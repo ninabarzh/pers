@@ -1,18 +1,36 @@
 {% extends "base.html" %}
 
-{% block title %}Upload - OSS Finder{% endblock %}
-
 {% block content %}
-    <h1>Upload JSON</h1>
-    <form action="/upload" method="POST" enctype="multipart/form-data">
-        <input type="file" name="json_file" accept=".json">
-        <button type="submit">Upload</button>
-    </form>
-    {% if error and request.method == 'POST' %}
-        <p class="alert-danger">{{ error }}</p>
-    {% endif %}
-    {% if success %}
-        <p class="alert-success">Upload successful!</p>
-    {% endif %}
-    <small><a href="/">Back to Search</a></small>
+<div class="row justify-content-center">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h4 class="mb-0">Upload JSON</h4>
+            </div>
+            <div class="card-body">
+                <form action="/upload" method="POST" enctype="multipart/form-data">
+                    <div class="mb-3">
+                        <label for="jsonFile" class="form-label">Select JSON File</label>
+                        <input class="form-control" type="file" id="jsonFile" name="json_file" accept=".json" required>
+                        <div class="form-text">Only .json files are accepted</div>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Upload</button>
+                    <a href="/" class="btn btn-outline-secondary ms-2">Back to Search</a>
+                </form>
+
+                {% if error %}
+                <div class="alert alert-danger mt-3">
+                    {{ error }}
+                </div>
+                {% endif %}
+
+                {% if success %}
+                <div class="alert alert-success mt-3">
+                    Upload successful!
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
