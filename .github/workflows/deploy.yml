@@ -10,27 +10,29 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # Checkout the code
+      # Checking out the code.
       - name: Checkout code
         uses: actions/checkout@v3
 
-      # Add server to known hosts
+      # Adding server to known hosts.
       - name: Add server to known hosts
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.HETZNER_SERVER_FINGERPRINT }}" >> ~/.ssh/known_hosts
 
-      # Set up SSH key using webfactory/ssh-agent
+      # Setting up SSH key using webfactory/ssh-agent.
       - name: Set up SSH key
         uses: webfactory/ssh-agent@v0.7.0
         with:
           ssh-private-key: ${{ secrets.HETZNER_SSH_KEY }}
 
-      # Test SSH connection
+      # Testing SSH connection
       - name: Test SSH connection
         run: |
           ssh -o StrictHostKeyChecking=no deploy@${{ secrets.HETZNER_SERVER_IP }} "echo 'SSH connection successful'"
 
+      # Backing up the .env.prod and .env.dev files on the server to ensure that
+      # they are not overwritten during deployment.
       - name: Backup .env files
         run: |
           ssh -o StrictHostKeyChecking=no deploy@${{ secrets.HETZNER_SERVER_IP }} << 'ENDSSH'
@@ -39,10 +41,13 @@ jobs:
             cp .env.dev .env.dev.bak
           ENDSSH
 
+      # Using rsync to deploy the code to the Hetzner server, excluding the .git directory, node_modules, and
+      # any .env files to avoid overwriting sensitive or unnecessary files.
       - name: Deploy to Hetzner
         run: |
           rsync -avz --delete --exclude=".git" --exclude="node_modules" --exclude=".env*" ./ deploy@${{ secrets.HETZNER_SERVER_IP }}:/opt/pers/ || exit 1
 
+      # Restoring the .env.prod and .env.dev files from the backups created earlier.
       - name: Restore .env files
         run: |
           ssh -o StrictHostKeyChecking=no deploy@${{ secrets.HETZNER_SERVER_IP }} << 'ENDSSH'

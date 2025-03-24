@@ -1,3 +1,4 @@
+# backend/src/app/typesense_client.py
 import typesense
 from typesense.exceptions import ObjectNotFound, ServiceUnavailable, TypesenseClientError
 from dotenv import load_dotenv

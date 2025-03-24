@@ -3,20 +3,18 @@
 A project with [Typesense](https://typesense.org/) (No PhD required) in the backend, 
 [Starlette](https://www.starlette.io/) with [Jinja2 templates](https://jinja.palletsprojects.com/en/stable/) as the 
 frontend, and [Docker](https://www.docker.com/) for containerization, to be deployed to 
-[Hetzner](https://www.hetzner.com/) using [Sliplane](https://sliplane.io/).
+[Hetzner](https://www.hetzner.com/).
 
 A project started at the 
-[RIPE NCC Green Tech Hackathon](https://labs.ripe.net/author/becha/celebrating-green-tech-hackathon-results/). 
-
-The first index is made from OSSFinder scraped data, also see [oss4climate](https://github.com/Pierre-VF/oss4climate).
+[RIPE NCC Green Tech Hackathon](https://labs.ripe.net/author/becha/celebrating-green-tech-hackathon-results/), and 
+the first index is made from OSSFinder scraped data, also see [oss4climate](https://github.com/Pierre-VF/oss4climate).
 
 ## Development
 
 ### Build and run the containers
 
 ```commandline
-docker-compose up -d  # Uses docker-compose.yml by default
-
+docker-compose --env-file .env.dev up
 ```
 
 Down (and remove):
@@ -65,16 +63,10 @@ docker-compose run frontend-tests
 
 ## Production
 
-Build the production images:
-
-```commandline
-docker-compose -f docker-compose.prod.yml build
-```
-
 Start the production services:
 
 ```commandline
-docker-compose -f docker-compose.prod.yml --env-file .env.prod up -d
+docker-compose --env-file .env.prod up -d
 ```
 
 Stop the production services:
@@ -86,5 +78,5 @@ docker-compose -f docker-compose.prod.yml down
 View Logs:
 
 ```commandline
-docker-compose -f docker-compose.prod.yml logs -f
+docker-compose -f docker-compose.yml logs -f
 ```
