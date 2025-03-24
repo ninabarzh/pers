@@ -3,45 +3,111 @@
 {% block title %}Home - OSS Finder{% endblock %}
 
 {% block content %}
-    <h1>Search</h1>
-    <form action="/" method="GET">
-        <input type="text" name="q" placeholder="Search..." value="{{ query }}">
-        <button type="submit">Search</button>
-    </form>
+<div class="container mt-4">
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <!-- Search Card -->
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-primary text-white">
+                    <h4 class="mb-0">
+                        <i class="bi bi-search me-2"></i>Search OSS Projects
+                    </h4>
+                </div>
+                <div class="card-body">
+                    <form action="/" method="GET" class="mb-3">
+                        <div class="input-group">
+                            <input type="text"
+                                   class="form-control form-control-lg"
+                                   name="q"
+                                   placeholder="Search projects..."
+                                   value="{{ query }}"
+                                   required>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-search"></i> Search
+                            </button>
+                        </div>
+                    </form>
+                    <a href="/upload" class="btn btn-outline-primary">
+                        <i class="bi bi-upload me-1"></i> Upload JSON Data
+                    </a>
+                </div>
+            </div>
 
-    {% if error %}
-        <p class="alert-danger">Error: {{ error }}</p>
-    {% endif %}
+            <!-- Results Section -->
+            {% if results %}
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-light">
+                    <h5 class="mb-0">
+                        <i class="bi bi-list-ul me-2"></i>Search Results
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="list-group list-group-flush">
+                        {% for hit in results %}
+                        <div class="list-group-item">
+                            <div class="d-flex w-100 justify-content-between">
+                                <h5 class="mb-1">
+                                    <a href="{{ hit.document.url }}" target="_blank" class="text-decoration-none">
+                                        <i class="bi bi-github me-1"></i>{{ hit.document.name }}
+                                    </a>
+                                </h5>
+                                <small class="text-muted">
+                                    <i class="bi bi-calendar"></i> {{ hit.document.latest_update }}
+                                </small>
+                            </div>
+                            <p class="mb-1">
+                                <span class="badge bg-info text-dark">
+                                    <i class="bi bi-building"></i> {{ hit.document.organisation }}
+                                </span>
+                                <span class="badge bg-secondary ms-1">
+                                    <i class="bi bi-code-square"></i> {{ hit.document.language }}
+                                </span>
+                            </p>
+                            <p class="mb-1">{{ hit.document.description }}</p>
+                            <small class="text-muted">
+                                <i class="bi bi-git"></i> {{ hit.document.last_commit }} |
+                                <i class="bi bi-journal-text"></i> {{ hit.document.license }}
+                            </small>
+                        </div>
+                        {% endfor %}
+                    </div>
 
-    <h2>Results</h2>
-    {% if results %}
-        <ul class="results-list">
-            {% for hit in results %}
-                <li class="result-item">
-                    <strong>{{ hit.document.name }}</strong><br>
-                    <em>{{ hit.document.organisation }}</em><br>
-                    <a href="{{ hit.document.url }}" target="_blank">{{ hit.document.url }}</a><br>
-                    {{ hit.document.description }}<br>
-                    <small>Last commit: {{ hit.document.last_commit }}</small>
-                </li>
-            {% endfor %}
-        </ul>
+                    <!-- Pagination -->
+                    {% if total_pages > 1 %}
+                    <nav aria-label="Page navigation" class="mt-4">
+                        <ul class="pagination justify-content-center">
+                            {% if page > 1 %}
+                            <li class="page-item">
+                                <a class="page-link" href="?q={{ query }}&page={{ page-1 }}">
+                                    <i class="bi bi-chevron-left"></i>
+                                </a>
+                            </li>
+                            {% endif %}
 
-        <!-- Pagination Controls -->
-        <div class="pagination">
-            {% if page > 1 %}
-                <a href="{{ url_for('home') }}?q={{ query }}&page={{ page - 1 }}&per_page={{ per_page }}" class="pagination-link">Previous</a>
-            {% endif %}
+                            {% for p in range(1, total_pages+1) %}
+                            <li class="page-item {% if p == page %}active{% endif %}">
+                                <a class="page-link" href="?q={{ query }}&page={{ p }}">{{ p }}</a>
+                            </li>
+                            {% endfor %}
 
-            <span class="pagination-info">Page {{ page }} of {{ total_pages }}</span>
-
-            {% if page < total_pages %}
-                <a href="{{ url_for('home') }}?q={{ query }}&page={{ page + 1 }}&per_page={{ per_page }}" class="pagination-link">Next</a>
+                            {% if page < total_pages %}
+                            <li class="page-item">
+                                <a class="page-link" href="?q={{ query }}&page={{ page+1 }}">
+                                    <i class="bi bi-chevron-right"></i>
+                                </a>
+                            </li>
+                            {% endif %}
+                        </ul>
+                    </nav>
+                    {% endif %}
+                </div>
+            </div>
+            {% elif query %}
+            <div class="alert alert-info">
+                <i class="bi bi-info-circle-fill me-2"></i>No results found for "{{ query }}"
+            </div>
             {% endif %}
         </div>
-    {% else %}
-        <p class="no-results">No results found.</p>
-    {% endif %}
-        <small><a href="/upload">Upload JSON</a></small>
-
+    </div>
+</div>
 {% endblock %}
