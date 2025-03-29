@@ -1,0 +1,100 @@
+# docker-compose.dev.yml
+services:
+  # Regular services (typesense, backend, frontend, nginx)
+  typesense:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.typesense
+    container_name: typesense-db-dev
+    ports:
+      - "8108:8108"
+    environment:
+      - TYPESENSE_API_KEY=dev_key
+      - TYPESENSE_DATA_DIR=/data
+    volumes:
+      - typesense-dev-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8108/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: backend-app-dev
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend/src:/app/src
+    environment:
+      - ENV=development
+      - PYTHONPATH=/app/src
+      - TYPESENSE_HOST=typesense
+      - TYPESENSE_PORT=8108
+      - TYPESENSE_API_KEY=dev_key
+      - TYPESENSE_PROTOCOL=http
+    depends_on:
+      typesense:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    container_name: frontend-app-dev
+    ports:
+      - "8001:8001"
+    volumes:
+      - ./frontend/src:/app/src
+    environment:
+      - ENV=development
+      - PYTHONPATH=/app/src
+      - FRONTEND_PORT=8001
+      - BACKEND_URL=http://backend:8000
+    depends_on:
+      - backend
+
+  # Test services (activated with --profile test)
+  backend-tests:
+    profiles: ["test"]
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    volumes:
+      - ./backend/src:/app/src
+      - ./backend/tests:/app/tests
+    environment:
+      - ENV=testing
+      - PYTHONPATH=/app/src
+      - TYPESENSE_HOST=typesense
+      - TYPESENSE_PORT=8108
+      - TYPESENSE_API_KEY=dev_key
+    depends_on:
+      - typesense
+    command: ["pytest", "/app/tests"]
+
+  frontend-tests:
+    profiles: ["test"]
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    volumes:
+      - ./frontend/src:/app/src
+      - ./frontend/tests:/app/tests
+    environment:
+      - ENV=testing
+      - PYTHONPATH=/app/src
+      - BACKEND_URL=http://backend:8000
+    depends_on:
+      - backend
+    command: ["pytest", "/app/tests"]
+
+volumes:
+  typesense-dev-data:
+
+networks:
+  default:
+    name: app-network-dev
+    driver: bridge

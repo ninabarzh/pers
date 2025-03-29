@@ -1,3 +1,4 @@
+# backend/Dockerfile.typesense
 # Use the official Typesense image as the base
 FROM typesense/typesense:0.24.1
 

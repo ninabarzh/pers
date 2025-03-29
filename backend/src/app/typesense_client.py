@@ -6,26 +6,22 @@ import time
 import logging
 import os
 
-# Load .env.dev or .env.prod based on the ENV variable
-env = os.getenv('ENV', 'development')
-if env == 'production':
-    load_dotenv('../.env.prod')
-else:
-    load_dotenv('../.env.dev')
+# Always load .env, production values will come from environment
+load_dotenv('../.env')
 
-# Access environment variables with defaults or raise an error if missing
-TYPESENSE_API_KEY = os.getenv('TYPESENSE_API_KEY')
-TYPESENSE_HOST = os.getenv('TYPESENSE_HOST')
-TYPESENSE_PORT = os.getenv('TYPESENSE_PORT')
-TYPESENSE_PROTOCOL = os.getenv('TYPESENSE_PROTOCOL', 'http')  # Default to 'http' if not set
+# Load environment variables (fall back to non-prefixed versions for local development)
+TYPESENSE_API_KEY = os.getenv('PROD_TYPESENSE_API_KEY') or os.getenv('TYPESENSE_API_KEY')
+TYPESENSE_HOST = os.getenv('PROD_TYPESENSE_HOST') or os.getenv('TYPESENSE_HOST')
+TYPESENSE_PORT = os.getenv('PROD_TYPESENSE_PORT') or os.getenv('TYPESENSE_PORT')
+TYPESENSE_PROTOCOL = os.getenv('PROD_TYPESENSE_PROTOCOL') or os.getenv('TYPESENSE_PROTOCOL', 'http')  # Default to http
 
 # Validate required environment variables
 if not TYPESENSE_API_KEY:
-    raise ValueError("TYPESENSE_API_KEY is missing. Check your .env.dev files.")
+    raise ValueError("TYPESENSE_API_KEY is missing. Check your .env files.")
 if not TYPESENSE_HOST:
-    raise ValueError("TYPESENSE_HOST is missing. Check your .env.dev files.")
+    raise ValueError("TYPESENSE_HOST is missing. Check your .env files.")
 if not TYPESENSE_PORT:
-    raise ValueError("TYPESENSE_PORT is missing. Check your .env.dev files.")
+    raise ValueError("TYPESENSE_PORT is missing. Check your .env files.")
 
 # Initialize logging
 logging.basicConfig(level=logging.DEBUG)

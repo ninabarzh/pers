@@ -11,15 +11,42 @@ the first index is made from OSSFinder scraped data, also see [oss4climate](http
 
 ## Development
 
-### Build and run the containers
+Start all services:
 
 ```commandline
-docker-compose --env-file .env.dev up
+docker-compose -f docker-compose.dev.yml up --build
+```
+
+Run tests:
+
+```commandline
+docker-compose -f docker-compose.dev.yml --profile test up backend-tests frontend-tests
+```
+
+Access services:
+
+* Frontend: http://localhost:8001
+* Backend: http://localhost:8000
+* Nginx: http://localhost:8080
+* Typesense: http://localhost:8108
+
+# First time or after changes:
+
+```commandline
+
+```
+docker-compose up --build backend frontend typesense
+
+# Subsequent runs:
+docker-compose up backend frontend typesense
+
+```commandline
+docker-compose --env-file .env docker-compose up --build backend frontend
 ```
 
 Down (and remove):
 ```commandline
-docker-compose down
+docker-compose down -v  # Removes containers and volumes
 ```
 
 ### Run the tests

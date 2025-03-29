@@ -5,15 +5,12 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile.typesense
-    env_file:
-      - .env.dev  # Development environment variables
-      - .env.prod # Production environment variables (overrides .env.dev)
     container_name: typesense-db
     ports:
       - "${TYPESENSE_PORT}:8108"
     environment:
-      - TYPESENSE_API_KEY=${TYPESENSE_API_KEY}
-      - TYPESENSE_DATA_DIR=${TYPESENSE_DATA_DIR}
+      - TYPESENSE_API_KEY=${PROD_TYPESENSE_API_KEY}
+      - TYPESENSE_DATA_DIR=${PROD_TYPESENSE_DATA_DIR}
     volumes:
       - typesense_data:/data
     healthcheck:
@@ -30,23 +27,26 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile
-    env_file:
-      - .env.dev  # Development environment variables
-      - .env.prod # Production environment variables (overrides .env.dev)
     container_name: backend-app
     ports:
       - "${BACKEND_PORT}:8000"
     volumes:
       - ./backend/src:/app/src  # Bind mount for development
     environment:
-      - PYTHONPATH=${BACKEND_PYTHONPATH}
-      - TYPESENSE_HOST=typesense
-      - TYPESENSE_PORT=8108
-      - TYPESENSE_PROTOCOL=http
-      - TYPESENSE_API_KEY=${TYPESENSE_API_KEY}
+      - PYTHONPATH=${PROD_BACKEND_PYTHONPATH}
+      - TYPESENSE_HOST=${PROD_TYPESENSE_HOST}
+      - TYPESENSE_PORT=${PROD_TYPESENSE_PORT}
+      - TYPESENSE_API_KEY=${PROD_TYPESENSE_API_KEY}
+      - BACKEND_PORT=${PROD_BACKEND_PORT}
+      - TYPESENSE_PROTOCOL=${PROD_TYPESENSE_PROTOCOL:-http}  # Default to http if not set
     depends_on:
       typesense:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
     restart: unless-stopped
     networks:
       - app-network
@@ -56,16 +56,14 @@ services:
     build:
       context: .
       dockerfile: frontend/Dockerfile
-    env_file:
-      - .env.dev  # Development environment variables
-      - .env.prod # Production environment variables (overrides .env.dev)
     container_name: frontend-app
     ports:
-      - "${FRONTEND_PORT}:8001"
+      - "${FRONTEND_PORT:-8001}:8001"
     volumes:
       - ./frontend/src:/app/src  # Bind mount for development
     environment:
-      - PYTHONPATH=${FRONTEND_PYTHONPATH}
+      - PYTHONPATH=${PROD_FRONTEND_PYTHONPATH}
+      - FRONTEND_PORT=${PROD_FRONTEND_PORT}
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
       interval: 10s
@@ -77,23 +75,49 @@ services:
     networks:
       - app-network
 
-  # Nginx reverse proxy (production only)
   nginx:
-    profiles: ["production"]
     image: nginx:latest
+    profiles: ["production"]
     container_name: nginx-proxy
+    volumes:
+      - ./nginx/nginx.prod.conf:/etc/nginx/nginx.conf
+      - ./nginx/snippets:/etc/nginx/snippets
+      - static_volume:/var/www/static
+      - certbot_www:/var/www/certbot
+      - certbot_conf:/etc/letsencrypt
     ports:
       - "80:80"
       - "443:443"
-    volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf  # Mount Nginx configuration
-      - /opt/certs/fullchain.pem:/etc/nginx/certs/fullchain.pem # Mount SSL certificate
-      - /opt/certs/privkey.pem:/etc/nginx/certs/privkey.pem # Mount SSL private key
     depends_on:
-      - backend
-      - frontend
+      frontend:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+      certbot:
+        condition: service_started
     networks:
       - app-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  certbot:
+    image: certbot/certbot
+    profiles: ["production"]
+    container_name: certbot
+    volumes:
+      - certbot_www:/var/www/certbot
+      - certbot_conf:/etc/letsencrypt
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew --post-hook \"nginx -s reload\"; sleep 12h & wait $${!}; done;'"
+    depends_on:
+      nginx:
+        condition: service_started
+    networks:
+      - app-network
+    restart: unless-stopped
 
   # Backend tests (development only)
   backend-tests:
@@ -111,7 +135,7 @@ services:
       - ./backend/src:/app/src
       - ./backend/tests:/app/tests
     env_file:
-      - .env.dev
+      - .env
     environment:
       - TEST_ENV=development
       - DEBUG=true
@@ -135,16 +159,19 @@ services:
       - ./frontend/src:/app/src
       - ./frontend/tests:/app/tests
     env_file:
-      - .env.dev
+      - .env
     environment:
-      - TEST_ENV=development
-      - DEBUG=true
+      - PYTHONPATH=${PROD_FRONTEND_PYTHONPATH:-/app/src}
+      - FRONTEND_PORT=${PROD_FRONTEND_PORT:-8001}
     command: ["./run_tests.sh"]
     networks:
       - app-network
 
 volumes:
   typesense_data:
+  static_volume:
+  certbot_www:
+  certbot_conf:
 
 networks:
   app-network:

@@ -1,57 +1,72 @@
+# .github/workflows/deploy.yml
 name: Deploy to Hetzner
 
 on:
   push:
     branches:
-      - main  # Trigger on pushes to the main branch
+      - main
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
 
     steps:
-      # Checking out the code.
       - name: Checkout code
         uses: actions/checkout@v3
 
-      # Adding server to known hosts.
       - name: Add server to known hosts
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.HETZNER_SERVER_FINGERPRINT }}" >> ~/.ssh/known_hosts
 
-      # Setting up SSH key using webfactory/ssh-agent.
       - name: Set up SSH key
         uses: webfactory/ssh-agent@v0.7.0
         with:
           ssh-private-key: ${{ secrets.HETZNER_SSH_KEY }}
 
-      # Testing SSH connection
-      - name: Test SSH connection
-        run: |
-          ssh -o StrictHostKeyChecking=no deploy@${{ secrets.HETZNER_SERVER_IP }} "echo 'SSH connection successful'"
-
-      # Backing up the .env.prod and .env.dev files on the server to ensure that
-      # they are not overwritten during deployment.
-      - name: Backup .env files
-        run: |
-          ssh -o StrictHostKeyChecking=no deploy@${{ secrets.HETZNER_SERVER_IP }} << 'ENDSSH'
-            cd /opt/pers
-            cp .env.prod .env.prod.bak
-            cp .env.dev .env.dev.bak
-          ENDSSH
-
-      # Using rsync to deploy the code to the Hetzner server, excluding the .git directory, node_modules, and
-      # any .env files to avoid overwriting sensitive or unnecessary files.
       - name: Deploy to Hetzner
         run: |
-          rsync -avz --delete --exclude=".git" --exclude="node_modules" --exclude=".env*" ./ deploy@${{ secrets.HETZNER_SERVER_IP }}:/opt/pers/ || exit 1
+          rsync -avz --delete \
+            --exclude=".git" \
+            --exclude="node_modules" \
+            ./ deploy@${{ secrets.HETZNER_SERVER_IP }}:/opt/pers/
 
-      # Restoring the .env.prod and .env.dev files from the backups created earlier.
-      - name: Restore .env files
+      - name: Prepare Server Environment
         run: |
-          ssh -o StrictHostKeyChecking=no deploy@${{ secrets.HETZNER_SERVER_IP }} << 'ENDSSH'
+          ssh deploy@${{ secrets.HETZNER_SERVER_IP }} << 'ENDSSH'
             cd /opt/pers
-            mv .env.prod.bak .env.prod
-            mv .env.dev.bak .env.dev
+            mkdir -p data/typesense nginx/snippets
+            chmod -R 755 data
+          ENDSSH
+
+      - name: Initialize Services
+        run: |
+          ssh deploy@${{ secrets.HETZNER_SERVER_IP }} << 'ENDSSH'
+            cd /opt/pers
+            
+            # Build containers first
+            docker-compose build
+            
+            # Prepare static files
+            docker-compose run --rm frontend sh -c "mkdir -p /var/www/static && cp -r /app/src/app/static/* /var/www/static/"
+            
+            # Set environment variables
+            export TYPESENSE_API_KEY=${{ secrets.PROD_TYPESENSE_API_KEY }}
+            export TYPESENSE_DATA_DIR=${{ secrets.PROD_TYPESENSE_DATA_DIR }}
+            export TYPESENSE_HOST=${{ secrets.PROD_TYPESENSE_HOST }}
+            export TYPESENSE_PORT=${{ secrets.PROD_TYPESENSE_PORT }}
+            export BACKEND_PORT=${{ secrets.PROD_BACKEND_PORT }}
+            export FRONTEND_PORT=${{ secrets.PROD_FRONTEND_PORT }}
+            export BACKEND_PYTHONPATH=${{ secrets.PROD_BACKEND_PYTHONPATH }}
+            export FRONTEND_PYTHONPATH=${{ secrets.PROD_FRONTEND_PYTHONPATH }}
+            export TYPESENSE_PROTOCOL=${{ secrets.PROD_TYPESENSE_PROTOCOL }}
+            
+            # Initialize Let's Encrypt if needed
+            if [ ! -d "letsencrypt-live" ]; then
+              chmod +x init-letsencrypt.sh
+              ./init-letsencrypt.sh
+            fi
+            
+            # Start services
+            docker-compose up -d
           ENDSSH

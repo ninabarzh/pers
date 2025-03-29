@@ -7,18 +7,14 @@ from .routes.upload import upload
 from dotenv import load_dotenv
 import os
 
-# Load .env.dev or .env.prod based on the ENV variable
-env = os.getenv('ENV', 'development')
-if env == 'production':
-    load_dotenv('../.env.prod')
-else:
-    load_dotenv('../.env.dev')
+# Always load .env, production values will come from environment
+load_dotenv('../.env')
 
-# Access environment variables
-TYPESENSE_API_KEY = os.getenv('TYPESENSE_API_KEY')
-TYPESENSE_HOST = os.getenv('TYPESENSE_HOST')
-TYPESENSE_PORT = os.getenv('TYPESENSE_PORT')
-BACKEND_PORT = os.getenv('BACKEND_PORT')
+# Load environment variables (fall back to non-prefixed versions for local development)
+TYPESENSE_API_KEY = os.getenv('PROD_TYPESENSE_API_KEY') or os.getenv('TYPESENSE_API_KEY')
+TYPESENSE_HOST = os.getenv('PROD_TYPESENSE_HOST') or os.getenv('TYPESENSE_HOST')
+TYPESENSE_PORT = os.getenv('PROD_TYPESENSE_PORT') or os.getenv('TYPESENSE_PORT')
+BACKEND_PORT = os.getenv('PROD_BACKEND_PORT') or os.getenv('BACKEND_PORT')
 
 # Health check endpoint
 async def health_check(request):
