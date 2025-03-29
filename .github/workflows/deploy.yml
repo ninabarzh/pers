@@ -74,22 +74,20 @@ jobs:
       # === DEPLOY SERVICES ===
       - name: Start containers
         run: |
-          ssh -i ~/.ssh/id_ed25519 deploy@${{ secrets.HETZNER_SERVER_IP }} <<EOF
+          ssh -i ~/.ssh/id_ed25519 deploy@${{ secrets.HETZNER_SERVER_IP }} <<'EOF'
             set -euxo pipefail
             cd ${{ env.PROJECT_DIR }} || exit 1
             
             # Stop any running containers
-            docker-compose -f ${{ env.COMPOSE_FILE }} down --remove-orphans || true
+            docker compose -f ${{ env.COMPOSE_FILE }} down --remove-orphans || true
             
             # Build and start
-            docker-compose -f ${{ env.COMPOSE_FILE }} build --no-cache
-            docker-compose -f ${{ env.COMPOSE_FILE }} up -d
+            docker compose -f ${{ env.COMPOSE_FILE }} build --no-cache --pull
+            docker compose -f ${{ env.COMPOSE_FILE }} up -d --wait
             
             # Handle Let's Encrypt
             if [ -d "data/certbot/conf/live" ]; then
-              docker-compose -f ${{ env.COMPOSE_FILE }} run --rm certbot renew --dry-run
-            else
-              echo "No existing Let's Encrypt certificates found"
+              docker compose -f ${{ env.COMPOSE_FILE }} run --rm certbot renew --dry-run
             fi
           EOF
 
