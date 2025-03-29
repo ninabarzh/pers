@@ -21,19 +21,46 @@ jobs:
       # === SECURE SSH SETUP ===
       - name: Configure SSH for ed25519
         run: |
+          # 1. Setup SSH directory
           mkdir -p ~/.ssh
-          # Add ed25519 host fingerprint
-          echo "${{ secrets.HETZNER_SERVER_IP }} ${{ secrets.HETZNER_SERVER_FINGERPRINT }}" >> ~/.ssh/known_hosts
+          chmod 700 ~/.ssh
           
-          # Write ed25519 private key
+          # 2. Add host fingerprint (with validation)
+          {
+            echo "Host target-server"
+            echo "  HostName ${{ secrets.HETZNER_SERVER_IP }}"
+            echo "  User deploy"
+            echo "  IdentityFile ~/.ssh/id_ed25519"
+            echo "  StrictHostKeyChecking yes"
+            echo "  UserKnownHostsFile ~/.ssh/known_hosts"
+          } > ~/.ssh/config
+          
+          # 3. Validate and write fingerprint
+          FINGERPRINT="${{ secrets.HETZNER_SERVER_FINGERPRINT }}"
+          if [[ ! "$FINGERPRINT" =~ "ssh-ed25519" ]]; then
+            echo "::error::Invalid fingerprint format. Expected 'ssh-ed25519 AAA...'"
+            exit 1
+          fi
+          echo "${{ secrets.HETZNER_SERVER_IP }} $FINGERPRINT" > ~/.ssh/known_hosts
+          
+          # 4. Write and validate private key
           echo "${{ secrets.HETZNER_SSH_KEY }}" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
+          if ! ssh-keygen -l -f ~/.ssh/id_ed25519 | grep -q "ED25519"; then
+            echo "::error::Invalid ED25519 private key"
+            exit 1
+          fi
           
-          # Verify key type
-          ssh-keygen -l -f ~/.ssh/id_ed25519 | grep -q "ED25519" || (echo "ERROR: Not an ED25519 key"; exit 1)
-          
-          # Test connection
-          ssh -o BatchMode=yes -i ~/.ssh/id_ed25519 deploy@${{ secrets.HETZNER_SERVER_IP }} exit
+          # 5. Test connection with timeout
+          if ! timeout 10 ssh -T -F ~/.ssh/config target-server echo "Connection test successful"; then
+            echo "::error::SSH connection failed"
+            echo "Debug info:"
+            echo "Config:"
+            cat ~/.ssh/config
+            echo "Key info:"
+            ssh-keygen -l -f ~/.ssh/id_ed25519
+            exit 1
+          fi
 
       # === DEPLOY CODE ===
       - name: Rsync code to server
