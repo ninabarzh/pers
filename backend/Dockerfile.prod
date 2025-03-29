@@ -20,6 +20,9 @@ WORKDIR /app
 COPY --from=builder /root/.local /root/.local
 COPY --from=builder /app/src/ /app/src/
 
+# Create static directory (will be overridden by volume mount)
+RUN mkdir -p /app/static && chmod 755 /app/static
+
 # Ensure scripts in .local are usable
 ENV PATH=/root/.local/bin:$PATH
 

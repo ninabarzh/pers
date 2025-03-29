@@ -23,7 +23,8 @@ services:
       - BACKEND_PORT=8000
       - TYPESENSE_PROTOCOL=http
     volumes:
-      - static_volume:/app/src/app/static:ro
+      # read-write for if backend needs to write files
+      - static_volume:/app/static:rw
 
   frontend:
     extends:

@@ -11,6 +11,12 @@ RUN pip install --no-cache-dir --user -r requirements.txt
 # Copy application code
 COPY src/ /app/src/
 
+# Pre-compress files
+RUN apt-get update && apt-get install -y brotli gzip && \
+    find /app/src/app/static/ -type f \( -name "*.css" -o -name "*.js" -o -name "*.svg" \) \
+    -exec gzip -9 -k {} \; \
+    -exec brotli -9 -k {} \;
+
 # Stage 2: Runtime
 FROM python:3.12-slim
 
@@ -19,7 +25,11 @@ WORKDIR /app
 # Copy installed dependencies from builder
 COPY --from=builder /root/.local /root/.local
 COPY --from=builder /app/src/ /app/src/
-COPY --from=builder /app/src/app/static /var/www/static
+
+# Ensure static files are in the correct location for Nginx
+RUN mkdir -p /var/www/static && \
+    cp -r /app/src/app/static/* /var/www/static/ && \
+    chmod -R 755 /var/www/static
 
 # Ensure scripts in .local are usable
 ENV PATH=/root/.local/bin:$PATH
