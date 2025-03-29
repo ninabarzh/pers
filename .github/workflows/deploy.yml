@@ -8,6 +8,7 @@ on:
 env:
   PROJECT_DIR: /opt/pers
   COMPOSE_FILE: docker-compose.prod.yml
+  SSH_OPTS: "-o StrictHostKeyChecking=yes -o IdentitiesOnly=yes -o LogLevel=ERROR"
 
 jobs:
   deploy:
@@ -18,47 +19,18 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      # === SECURE SSH SETUP ===
-      - name: Configure SSH for ed25519
+      # === SSH SETUP (ONCE) ===
+      - name: Configure SSH
         run: |
-          # 1. Setup SSH directory
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
-          
-          # 2. Add host fingerprint (with validation)
-          {
-            echo "Host target-server"
-            echo "  HostName ${{ secrets.HETZNER_SERVER_IP }}"
-            echo "  User deploy"
-            echo "  IdentityFile ~/.ssh/id_ed25519"
-            echo "  StrictHostKeyChecking yes"
-            echo "  UserKnownHostsFile ~/.ssh/known_hosts"
-          } > ~/.ssh/config
-          
-          # 3. Validate and write fingerprint
-          FINGERPRINT="${{ secrets.HETZNER_SERVER_FINGERPRINT }}"
-          if [[ ! "$FINGERPRINT" =~ "ssh-ed25519" ]]; then
-            echo "::error::Invalid fingerprint format. Expected 'ssh-ed25519 AAA...'"
-            exit 1
-          fi
-          echo "${{ secrets.HETZNER_SERVER_IP }} $FINGERPRINT" > ~/.ssh/known_hosts
-          
-          # 4. Write and validate private key
+          echo "${{ secrets.HETZNER_SERVER_IP }} ${{ secrets.HETZNER_SERVER_FINGERPRINT }}" > ~/.ssh/known_hosts
           echo "${{ secrets.HETZNER_SSH_KEY }}" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
-          if ! ssh-keygen -l -f ~/.ssh/id_ed25519 | grep -q "ED25519"; then
-            echo "::error::Invalid ED25519 private key"
-            exit 1
-          fi
           
-          # 5. Test connection with timeout
-          if ! timeout 10 ssh -T -F ~/.ssh/config target-server echo "Connection test successful"; then
-            echo "::error::SSH connection failed"
-            echo "Debug info:"
-            echo "Config:"
-            cat ~/.ssh/config
-            echo "Key info:"
-            ssh-keygen -l -f ~/.ssh/id_ed25519
+          # Verify connection
+          if ! ssh -T $SSH_OPTS -i ~/.ssh/id_ed25519 deploy@${{ secrets.HETZNER_SERVER_IP }} echo "SSH verified"; then
+            echo "::error::SSH verification failed"
             exit 1
           fi
 
@@ -66,7 +38,7 @@ jobs:
       - name: Rsync code to server
         run: |
           rsync -avz --delete \
-            -e "ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes" \
+            -e "ssh $SSH_OPTS -i ~/.ssh/id_ed25519" \
             --exclude=".git" \
             --exclude=".github" \
             --exclude="node_modules" \
@@ -76,19 +48,18 @@ jobs:
             --exclude="__pycache__" \
             ./ deploy@${{ secrets.HETZNER_SERVER_IP }}:$PROJECT_DIR/
 
-      # === SERVER SETUP ===
-      - name: Prepare server environment
+      # === SERVER OPERATIONS ===
+      - name: Initialize server
         run: |
-          ssh -i ~/.ssh/id_ed25519 deploy@${{ secrets.HETZNER_SERVER_IP }} << 'ENDSSH'
-            set -euo pipefail
+          ssh $SSH_OPTS -i ~/.ssh/id_ed25519 deploy@${{ secrets.HETZNER_SERVER_IP }} <<'EOF'
+            set -euxo pipefail
             cd $PROJECT_DIR
-            
-            # Create necessary directories
-            mkdir -p data/typesense data/certbot/{conf,www} nginx/snippets
+            mkdir -p data/{typesense,certbot/{conf,www}} nginx/snippets
             chmod -R 755 data
             
-            # Create or update .env file
-            cat << EOF > .env
+            # Safely create .env
+            umask 077
+            cat > .env <<CONFIG
             # Backend
             PROD_BACKEND_PORT=${{ secrets.PROD_BACKEND_PORT }}
             PROD_BACKEND_PYTHONPATH=${{ secrets.PROD_BACKEND_PYTHONPATH }}
@@ -102,83 +73,58 @@ jobs:
             PROD_TYPESENSE_DATA_DIR=${{ secrets.PROD_TYPESENSE_DATA_DIR }}
             PROD_TYPESENSE_HOST=typesense
             PROD_TYPESENSE_PORT=8108
-            EOF
-            
-            chmod 600 .env
-          ENDSSH
+            CONFIG
+          EOF
 
-      # === DEPLOY SERVICES ===
-      - name: Build and deploy containers
+      - name: Deploy containers
         run: |
-          ssh -i ~/.ssh/id_ed25519 deploy@${{ secrets.HETZNER_SERVER_IP }} << 'ENDSSH'
-            set -euo pipefail
+          ssh $SSH_OPTS -i ~/.ssh/id_ed25519 deploy@${{ secrets.HETZNER_SERVER_IP }} <<'EOF'
+            set -euxo pipefail
             cd $PROJECT_DIR
             
-            # Stop existing containers
-            docker-compose -f $COMPOSE_FILE down --remove-orphans || true
+            # Stop old containers
+            docker-compose -f $COMPOSE_FILE down --remove-orphans --timeout 30 || true
             
-            # Build fresh containers
-            docker-compose -f $COMPOSE_FILE build --no-cache
+            # Build fresh
+            docker-compose -f $COMPOSE_FILE build --no-cache --pull
             
-            # Handle Let's Encrypt
-            if [ ! -d "data/certbot/conf/live" ]; then
-              echo "Initializing Let's Encrypt..."
-              chmod +x init-letsencrypt.sh
-              ./init-letsencrypt.sh
-            else
-              echo "Starting existing services..."
-              docker-compose -f $COMPOSE_FILE up -d --force-recreate
+            # Start with Let's Encrypt handling
+            if [ -d "data/certbot/conf/live" ]; then
               docker-compose -f $COMPOSE_FILE run --rm certbot renew --dry-run
             fi
-          ENDSSH
+            docker-compose -f $COMPOSE_FILE up -d --force-recreate
+          EOF
 
       # === VERIFICATION ===
       - name: Verify deployment
         run: |
-          ssh -i ~/.ssh/id_ed25519 deploy@${{ secrets.HETZNER_SERVER_IP }} << 'ENDSSH'
+          ssh $SSH_OPTS -i ~/.ssh/id_ed25519 deploy@${{ secrets.HETZNER_SERVER_IP }} <<'EOF'
             set -euo pipefail
             cd $PROJECT_DIR
             
-            # Container status check
-            running_containers=$(docker-compose -f $COMPOSE_FILE ps -q | wc -l)
-            [ "$running_containers" -ge 3 ] || {
-              echo "ERROR: Missing containers (expected 3+, got $running_containers)"
+            # Container check
+            if [ $(docker-compose -f $COMPOSE_FILE ps -q | wc -l) -lt 3 ]; then
               docker-compose -f $COMPOSE_FILE logs
               exit 1
+            fi
+            
+            # Health checks with timeout
+            check_service() {
+              local url=$1
+              if ! curl -fsS --max-time 5 --retry 3 "$url"; then
+                echo "Health check failed for $url"
+                return 1
+              fi
             }
             
-            # Service health checks
-            declare -A endpoints=(
-              ["backend"]="http://localhost:${{ secrets.PROD_BACKEND_PORT }}/health"
-              ["frontend"]="http://localhost:${{ secrets.PROD_FRONTEND_PORT }}/health"
-            )
-            
-            for service in "${!endpoints[@]}"; do
-              echo "Testing $service health..."
-              curl -fsS --retry 3 --max-time 5 "${endpoints[$service]}" || {
-                echo "HEALTH CHECK FAILED: $service"
-                exit 1
-              }
-            done
-          ENDSSH
-
-      # === CLEANUP ===
-      - name: Clean up old containers
-        if: always()
-        run: |
-          # Simplified reliable approach
-          mkdir -p ~/.ssh
-          echo "${{ secrets.HETZNER_SERVER_IP }} ${{ secrets.HETZNER_SERVER_FINGERPRINT }}" > ~/.ssh/known_hosts
-          echo "${{ secrets.HETZNER_SSH_KEY }}" > ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/{known_hosts,id_ed25519}
-          
-          # Execute with explicit success handling
-          ssh -T -o StrictHostKeyChecking=yes \
-              -i ~/.ssh/id_ed25519 \
-              deploy@${{ secrets.HETZNER_SERVER_IP }} <<'EOF' || echo "Cleanup completed (exit $?)"
-            set -e
-            docker container prune -f
-            docker image prune -af
-            exit 0  # Explicit success
+            check_service "http://localhost:${{ secrets.PROD_BACKEND_PORT }}/health"
+            check_service "http://localhost:${{ secrets.PROD_FRONTEND_PORT }}/health"
           EOF
 
+      # === CLEANUP ===
+      - name: System cleanup
+        if: always()
+        run: |
+          ssh $SSH_OPTS -i ~/.ssh/id_ed25519 deploy@${{ secrets.HETZNER_SERVER_IP }} <<'EOF' || echo "Cleanup completed"
+            docker system prune -af --volumes --filter "until=24h"
+          EOF
