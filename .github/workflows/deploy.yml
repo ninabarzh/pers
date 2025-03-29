@@ -18,19 +18,28 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Add server to known hosts
+      # ===== SECURE SSH SETUP =====
+      - name: Configure SSH for ed25519
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.HETZNER_SERVER_FINGERPRINT }}" >> ~/.ssh/known_hosts
+          # Add ed25519 host fingerprint
+          echo "${{ secrets.HETZNER_SERVER_IP }} ${{ secrets.HETZNER_SERVER_FINGERPRINT }}" >> ~/.ssh/known_hosts
+          
+          # Write ed25519 private key
+          echo "${{ secrets.HETZNER_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          
+          # Verify key type
+          ssh-keygen -l -f ~/.ssh/id_ed25519 | grep -q "ED25519" || (echo "ERROR: Not an ED25519 key"; exit 1)
+          
+          # Test connection
+          ssh -o BatchMode=yes -i ~/.ssh/id_ed25519 deploy@${{ secrets.HETZNER_SERVER_IP }} exit
 
-      - name: Set up SSH key
-        uses: webfactory/ssh-agent@v0.7.0
-        with:
-          ssh-private-key: ${{ secrets.HETZNER_SSH_KEY }}
-
+      # ===== DEPLOY CODE =====
       - name: Rsync code to server
         run: |
           rsync -avz --delete \
+            -e "ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes" \
             --exclude=".git" \
             --exclude=".github" \
             --exclude="node_modules" \
@@ -40,9 +49,10 @@ jobs:
             --exclude="__pycache__" \
             ./ deploy@${{ secrets.HETZNER_SERVER_IP }}:$PROJECT_DIR/
 
+      # ===== SERVER SETUP =====
       - name: Prepare server environment
         run: |
-          ssh deploy@${{ secrets.HETZNER_SERVER_IP }} << 'ENDSSH'
+          ssh -i ~/.ssh/id_ed25519 deploy@${{ secrets.HETZNER_SERVER_IP }} << 'ENDSSH'
             set -euo pipefail
             cd $PROJECT_DIR
             
@@ -50,7 +60,7 @@ jobs:
             mkdir -p data/typesense data/certbot/{conf,www} nginx/snippets
             chmod -R 755 data
             
-            # Create or update .env file for Starlette
+            # Create or update .env file
             cat << EOF > .env
             # Backend
             PROD_BACKEND_PORT=${{ secrets.PROD_BACKEND_PORT }}
@@ -63,74 +73,73 @@ jobs:
             # Typesense
             PROD_TYPESENSE_API_KEY=${{ secrets.PROD_TYPESENSE_API_KEY }}
             PROD_TYPESENSE_DATA_DIR=${{ secrets.PROD_TYPESENSE_DATA_DIR }}
-            PROD_TYPESENSE_HOST=typesense  # Using container name for internal communication
-            PROD_TYPESENSE_PORT=8108       # Default Typesense port
+            PROD_TYPESENSE_HOST=typesense
+            PROD_TYPESENSE_PORT=8108
             EOF
             
-            # Set proper permissions
             chmod 600 .env
           ENDSSH
 
-      - name: Build and deploy services
+      # ===== DEPLOY SERVICES =====
+      - name: Build and deploy containers
         run: |
-          ssh deploy@${{ secrets.HETZNER_SERVER_IP }} << 'ENDSSH'
+          ssh -i ~/.ssh/id_ed25519 deploy@${{ secrets.HETZNER_SERVER_IP }} << 'ENDSSH'
             set -euo pipefail
             cd $PROJECT_DIR
             
-            # Stop existing containers if running
-            docker-compose -f $COMPOSE_FILE down || true
+            # Stop existing containers
+            docker-compose -f $COMPOSE_FILE down --remove-orphans || true
             
-            # Build containers with no-cache to ensure fresh builds
+            # Build fresh containers
             docker-compose -f $COMPOSE_FILE build --no-cache
             
-            # Initialize Let's Encrypt if needed
+            # Handle Let's Encrypt
             if [ ! -d "data/certbot/conf/live" ]; then
-              echo "Initializing Let's Encrypt certificates..."
+              echo "Initializing Let's Encrypt..."
               chmod +x init-letsencrypt.sh
               ./init-letsencrypt.sh
             else
-              echo "Existing Let's Encrypt certificates found"
-              # Start services
+              echo "Starting existing services..."
               docker-compose -f $COMPOSE_FILE up -d --force-recreate
-              
-              # Renew certificates in case they're close to expiry
               docker-compose -f $COMPOSE_FILE run --rm certbot renew --dry-run
             fi
-            
-            # Verify services are running
-            docker-compose -f $COMPOSE_FILE ps
           ENDSSH
 
+      # ===== VERIFICATION =====
       - name: Verify deployment
         run: |
-          ssh deploy@${{ secrets.HETZNER_SERVER_IP }} << 'ENDSSH'
+          ssh -i ~/.ssh/id_ed25519 deploy@${{ secrets.HETZNER_SERVER_IP }} << 'ENDSSH'
             set -euo pipefail
             cd $PROJECT_DIR
             
-            # Check containers are running
+            # Container status check
             running_containers=$(docker-compose -f $COMPOSE_FILE ps -q | wc -l)
-            if [ "$running_containers" -lt 3 ]; then
-              echo "Error: Not all containers are running"
+            [ "$running_containers" -ge 3 ] || {
+              echo "ERROR: Missing containers (expected 3+, got $running_containers)"
               docker-compose -f $COMPOSE_FILE logs
               exit 1
-            fi
+            }
             
-            # Basic health check for Starlette services
-            echo "Testing backend health..."
-            curl -fsSL http://localhost:${{ secrets.PROD_BACKEND_PORT }}/health || \
-              (echo "Backend health check failed" && exit 1)
+            # Service health checks
+            declare -A endpoints=(
+              ["backend"]="http://localhost:${{ secrets.PROD_BACKEND_PORT }}/health"
+              ["frontend"]="http://localhost:${{ secrets.PROD_FRONTEND_PORT }}/health"
+            )
             
-            echo "Testing frontend health..."
-            curl -fsSL http://localhost:${{ secrets.PROD_FRONTEND_PORT }}/health || \
-              (echo "Frontend health check failed" && exit 1)
+            for service in "${!endpoints[@]}"; do
+              echo "Testing $service health..."
+              curl -fsS --retry 3 --max-time 5 "${endpoints[$service]}" || {
+                echo "HEALTH CHECK FAILED: $service"
+                exit 1
+              }
+            done
           ENDSSH
 
-      - name: Clean up old containers and images
+      # ===== CLEANUP =====
+      - name: Clean up old containers
+        if: always()
         run: |
-          ssh deploy@${{ secrets.HETZNER_SERVER_IP }} << 'ENDSSH'
-            set -euo pipefail
-            # Remove unused containers
+          ssh -i ~/.ssh/id_ed25519 deploy@${{ secrets.HETZNER_SERVER_IP }} << 'ENDSSH'
             docker container prune -f
-            # Remove unused images
             docker image prune -af
           ENDSSH
