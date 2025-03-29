@@ -18,7 +18,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      # ===== SECURE SSH SETUP =====
+      # === SECURE SSH SETUP ===
       - name: Configure SSH for ed25519
         run: |
           mkdir -p ~/.ssh
@@ -35,7 +35,7 @@ jobs:
           # Test connection
           ssh -o BatchMode=yes -i ~/.ssh/id_ed25519 deploy@${{ secrets.HETZNER_SERVER_IP }} exit
 
-      # ===== DEPLOY CODE =====
+      # === DEPLOY CODE ===
       - name: Rsync code to server
         run: |
           rsync -avz --delete \
@@ -49,7 +49,7 @@ jobs:
             --exclude="__pycache__" \
             ./ deploy@${{ secrets.HETZNER_SERVER_IP }}:$PROJECT_DIR/
 
-      # ===== SERVER SETUP =====
+      # === SERVER SETUP ===
       - name: Prepare server environment
         run: |
           ssh -i ~/.ssh/id_ed25519 deploy@${{ secrets.HETZNER_SERVER_IP }} << 'ENDSSH'
@@ -80,7 +80,7 @@ jobs:
             chmod 600 .env
           ENDSSH
 
-      # ===== DEPLOY SERVICES =====
+      # === DEPLOY SERVICES ===
       - name: Build and deploy containers
         run: |
           ssh -i ~/.ssh/id_ed25519 deploy@${{ secrets.HETZNER_SERVER_IP }} << 'ENDSSH'
@@ -105,7 +105,7 @@ jobs:
             fi
           ENDSSH
 
-      # ===== VERIFICATION =====
+      # === VERIFICATION ===
       - name: Verify deployment
         run: |
           ssh -i ~/.ssh/id_ed25519 deploy@${{ secrets.HETZNER_SERVER_IP }} << 'ENDSSH'
@@ -135,11 +135,22 @@ jobs:
             done
           ENDSSH
 
-      # ===== CLEANUP =====
+      # === CLEANUP ===
+
       - name: Clean up old containers
         if: always()
         run: |
-          ssh -i ~/.ssh/id_ed25519 deploy@${{ secrets.HETZNER_SERVER_IP }} << 'ENDSSH'
+          # Re-establish SSH connection parameters
+          echo "${{ secrets.HETZNER_SERVER_IP }} ${{ secrets.HETZNER_SERVER_FINGERPRINT }}" >> ~/.ssh/known_hosts
+          echo "${{ secrets.HETZNER_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+
+          ssh -o StrictHostKeyChecking=yes \
+              -i ~/.ssh/id_ed25519 \
+              deploy@${{ secrets.HETZNER_SERVER_IP }} << 'ENDSSH'
+            set -e
+            echo "Cleaning up old containers..."
             docker container prune -f
             docker image prune -af
+            echo "Cleanup complete"
           ENDSSH
