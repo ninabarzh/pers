@@ -11,10 +11,30 @@ the first index is made from OSSFinder scraped data, also see [oss4climate](http
 
 ## Development
 
+### Services
+
 Start all services:
 
 ```commandline
 docker-compose -f docker-compose.dev.yml up --build
+```
+
+Stop the current containers: 
+
+```commandline
+docker-compose -f docker-compose.dev.yml down
+```
+
+Rebuild: 
+
+```commandline
+docker-compose -f docker-compose.dev.yml build
+```
+
+Start: 
+
+```commandline
+docker-compose -f docker-compose.dev.yml up
 ```
 
 Run tests:
@@ -23,50 +43,55 @@ Run tests:
 docker-compose -f docker-compose.dev.yml --profile test up backend-tests frontend-tests
 ```
 
-Access services:
+### Accessing services
 
 * Frontend: http://localhost:8001
 * Backend: http://localhost:8000
 * Nginx: http://localhost:8080
-* Typesense: http://localhost:8108
 
-# First time or after changes:
+### Verifying
 
-```commandline
-
-```
-docker-compose up --build backend frontend typesense
-
-# Subsequent runs:
-docker-compose up backend frontend typesense
+Verify Typesense is working from within the backend container:
 
 ```commandline
-docker-compose --env-file .env docker-compose up --build backend frontend
+docker exec -it backend-app-dev curl http://typesense:8108/health
 ```
 
-Down (and remove):
+(Should return `{"ok":true})`
+
+Checks from the host machine:
+
 ```commandline
-docker-compose down -v  # Removes containers and volumes
+curl http://localhost:8108/health
 ```
+
+Should also return `{"ok":true}` if ports are mapped correctly)
+
+Check backend health:
+
+```commandline
+curl http://localhost:8000/health
+```
+
+Should return `{"status":"healthy"}`
+
+Check frontend:
+
+```commandline
+curl -I http://localhost:8001
+```
+
+Should return `200 OK`
 
 ### Run the tests
 
-To run services with the test profile:
-
 ```commandline
-docker-compose --profile test up
-```
-
-```commandline
-docker-compose run backend-tests
-```
-
-```commandline
-docker-compose run frontend-tests
+docker-compose -f docker-compose.dev.yml --profile test up backend-tests frontend-tests
 ```
 
 ### Roadmap
 
+#### Getting started
 - [x] Typesense, backend and frontend dockers.
 - [x] Upload and search routes.
 - [x] Set up test framework and first tests.
@@ -75,35 +100,31 @@ docker-compose run frontend-tests
 - [x] Add CSS to make the frontend more visually appealing.
 - [x] Refactoring (1)
 - [x] Improve the dockers' robustness.
+
+#### Testing
+- [ ] A test helper function to handle HTML-encoded assertions
+- [ ] Document the expected error message formats in API specs
+- [ ] Set up test logging to capture full responses when debugging failures
+
+#### Expanding search capabilities
 - [ ] Relevancy ranking.
-- [ ] Add filters to narrow down search results (e.g., filter by organisation or license).
-- [ ] Use Typesense's highlighting feature to highlight search terms in the results.
-- [ ] Add user authentication to restrict access to the upload page.
+- [ ] Adding filters to narrow down search results (e.g., filter by organisation or license).
+- [ ] Using Typesense's highlighting feature to highlight search terms in the results.
+- [ ] Facets.
+
+#### Engineering
+- [ ] Initial production (the one to throw away).
 - [ ] Refactoring (2)
-- [ ] Deploy the application to Hetzner.
+- [ ] Deploy the application to Hetzner (2nd).
 - [ ] Consider scaling Typesense horizontally by adding more nodes to the cluster.
 - [ ] Set up regular backups of the Typesense data directory to ensure data safety.
 - [ ] Add monitoring and alerting for Typesense to track performance and detect issues early.
-- [ ] Facets.
+
+#### Further development
+- [ ] Add user authentication to restrict access to the upload page.
 - [ ] Create a new index page with user authentication.
 - [ ] When uploading a `.json` file as index, be able to choose which index to upload to.
 
 ## Production
 
 Start the production services:
-
-```commandline
-docker-compose --env-file .env.prod up -d
-```
-
-Stop the production services:
-
-```commandline
-docker-compose -f docker-compose.prod.yml down
-```
-    
-View Logs:
-
-```commandline
-docker-compose -f docker-compose.yml logs -f
-```

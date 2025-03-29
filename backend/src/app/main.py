@@ -20,8 +20,17 @@ BACKEND_PORT = os.getenv('PROD_BACKEND_PORT') or os.getenv('BACKEND_PORT')
 async def health_check(request):
     return JSONResponse({"status": "healthy"})
 
+# Root endpoint
+async def root(request):
+    return JSONResponse({"message": "Backend API", "endpoints": {
+        "/health": "GET - Health check",
+        "/search": "GET - Search endpoint",
+        "/upload": "POST - Upload endpoint"
+    }})
+
 # Routes
 routes = [
+    Route("/", root),
     Route("/health", health_check),
     Route("/search", search, methods=["GET"]),
     Route("/upload", upload, methods=["POST"]),

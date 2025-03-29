@@ -1,16 +1,14 @@
-# docker-compose.dev.yml
 services:
-  # Regular services (typesense, backend, frontend, nginx)
   typesense:
     build:
       context: .
       dockerfile: backend/Dockerfile.typesense
     container_name: typesense-db-dev
     ports:
-      - "8108:8108"
+      - "${TYPESENSE_PORT}:8108"
     environment:
-      - TYPESENSE_API_KEY=dev_key
-      - TYPESENSE_DATA_DIR=/data
+      - TYPESENSE_API_KEY=${TYPESENSE_API_KEY}
+      - TYPESENSE_DATA_DIR=${TYPESENSE_DATA_DIR}
     volumes:
       - typesense-dev-data:/data
     healthcheck:
@@ -18,6 +16,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
+    networks:
+      - app-network-dev
 
   backend:
     build:
@@ -25,19 +25,19 @@ services:
       dockerfile: backend/Dockerfile
     container_name: backend-app-dev
     ports:
-      - "8000:8000"
+      - "${BACKEND_PORT}:8000"
     volumes:
       - ./backend/src:/app/src
+      - ./backend/tests:/app/tests
+    env_file:
+      - .env
     environment:
-      - ENV=development
-      - PYTHONPATH=/app/src
-      - TYPESENSE_HOST=typesense
-      - TYPESENSE_PORT=8108
-      - TYPESENSE_API_KEY=dev_key
-      - TYPESENSE_PROTOCOL=http
+      - PYTHONPATH=${BACKEND_PYTHONPATH}
     depends_on:
       typesense:
         condition: service_healthy
+    networks:
+      - app-network-dev
 
   frontend:
     build:
@@ -45,56 +45,80 @@ services:
       dockerfile: frontend/Dockerfile
     container_name: frontend-app-dev
     ports:
-      - "8001:8001"
+      - "${FRONTEND_PORT}:8001"
     volumes:
       - ./frontend/src:/app/src
+      - ./frontend/tests:/app/tests
+      - ./frontend/src/app/static:/var/www/static
+    env_file:
+      - .env
     environment:
-      - ENV=development
-      - PYTHONPATH=/app/src
-      - FRONTEND_PORT=8001
-      - BACKEND_URL=http://backend:8000
+      - PYTHONPATH=${FRONTEND_PYTHONPATH}
     depends_on:
       - backend
+    networks:
+      - app-network-dev
 
-  # Test services (activated with --profile test)
+  nginx:
+    image: nginx:stable-perl
+    container_name: nginx-dev
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./nginx/nginx.dev.conf:/etc/nginx/nginx.conf
+      - ./frontend/src/app/static:/var/www/static
+    depends_on:
+      - frontend
+      - backend
+    networks:
+      - app-network-dev
+
   backend-tests:
     profiles: ["test"]
     build:
       context: .
       dockerfile: backend/Dockerfile
+    container_name: backend-tests-dev
     volumes:
       - ./backend/src:/app/src
       - ./backend/tests:/app/tests
+    env_file:
+      - .env
     environment:
-      - ENV=testing
-      - PYTHONPATH=/app/src
-      - TYPESENSE_HOST=typesense
-      - TYPESENSE_PORT=8108
-      - TYPESENSE_API_KEY=dev_key
+      - TYPESENSE_API_KEY=${TYPESENSE_API_KEY}
+      - TEST_ENV=true
     depends_on:
-      - typesense
-    command: ["pytest", "/app/tests"]
+      typesense:
+        condition: service_healthy
+      backend:
+        condition: service_started
+    command: ["./run_tests.sh"]
+    networks:
+      - app-network-dev
 
   frontend-tests:
     profiles: ["test"]
     build:
       context: .
       dockerfile: frontend/Dockerfile
+    container_name: frontend-tests-dev
     volumes:
       - ./frontend/src:/app/src
       - ./frontend/tests:/app/tests
-    environment:
-      - ENV=testing
-      - PYTHONPATH=/app/src
-      - BACKEND_URL=http://backend:8000
+    env_file:
+      - .env
     depends_on:
-      - backend
-    command: ["pytest", "/app/tests"]
+      frontend:
+        condition: service_started
+      backend:
+        condition: service_started
+    command: ["./run_tests.sh"]
+    networks:
+      - app-network-dev
 
 volumes:
   typesense-dev-data:
 
 networks:
-  default:
-    name: app-network-dev
+  app-network-dev:
     driver: bridge

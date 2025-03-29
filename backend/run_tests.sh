@@ -1,40 +1,41 @@
 #!/bin/bash
-# backend/run_tests.sh
 
+# backend/run_tests.sh
 # Ensure backend and typesense are running and healthy before executing tests.
 
-# Log environment variables
-echo "Environment Variables:"
-printenv
+set -e  # Exit immediately if any command fails
 
 # Wait for Typesense to be healthy
 echo "Waiting for Typesense to be healthy..."
-while ! curl -f http://typesense:8108/health; do
-  echo "Typesense not yet healthy. Retrying in 5 seconds..."
-  sleep 5
+until curl -fs http://typesense:8108/health >/dev/null; do
+  echo "Typesense not yet healthy. Retrying in 3 seconds..."
+  sleep 3
 done
 
-# Wait for Backend to be healthy
+# Wait for Backend to be healthy (if needed)
 echo "Waiting for backend to be healthy..."
-while ! curl -f http://backend:8000/health; do
-  echo "Backend not yet healthy. Retrying in 5 seconds..."
-  sleep 5
+until curl -fs http://backend:8000/health >/dev/null; do
+  echo "Backend not yet healthy. Retrying in 3 seconds..."
+  sleep 3
 done
 
-# Run tests
-echo "Running backend tests..."
-pytest -v tests/
+# Add network diagnostics
+echo "Network diagnostics:"
+ping -c 2 typesense || echo "Ping to typesense failed"
+ping -c 2 backend || echo "Ping to backend failed"
 
-# Include logging and debugging information.
+# Run tests with increased verbosity
+echo "Running backend tests with increased verbosity..."
+export PYTHONPATH=/app/src
+pytest -vv --log-level=DEBUG tests/
+
 # Capture exit code
 TEST_EXIT_CODE=$?
 
-# Log test results
 if [ $TEST_EXIT_CODE -eq 0 ]; then
-  echo "All tests passed!"
+  echo "✅ All backend tests passed!"
 else
-  echo "Some tests failed. Exit code: $TEST_EXIT_CODE"
+  echo "❌ Some backend tests failed"
 fi
 
-# Exit with the test exit code
 exit $TEST_EXIT_CODE
