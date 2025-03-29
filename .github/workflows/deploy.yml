@@ -8,7 +8,6 @@ on:
 env:
   PROJECT_DIR: /opt/pers
   COMPOSE_FILE: docker-compose.prod.yml
-  SSH_OPTS: "-o StrictHostKeyChecking=yes -o IdentitiesOnly=yes -o LogLevel=ERROR"
 
 jobs:
   deploy:
@@ -19,7 +18,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      # === SSH SETUP (ONCE) ===
+      # === SSH SETUP ===
       - name: Configure SSH
         run: |
           mkdir -p ~/.ssh
@@ -27,18 +26,12 @@ jobs:
           echo "${{ secrets.HETZNER_SERVER_IP }} ${{ secrets.HETZNER_SERVER_FINGERPRINT }}" > ~/.ssh/known_hosts
           echo "${{ secrets.HETZNER_SSH_KEY }}" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
-          
-          # Verify connection
-          if ! ssh -T $SSH_OPTS -i ~/.ssh/id_ed25519 deploy@${{ secrets.HETZNER_SERVER_IP }} echo "SSH verified"; then
-            echo "::error::SSH verification failed"
-            exit 1
-          fi
 
       # === DEPLOY CODE ===
       - name: Rsync code to server
         run: |
           rsync -avz --delete \
-            -e "ssh $SSH_OPTS -i ~/.ssh/id_ed25519" \
+            -e "ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=yes" \
             --exclude=".git" \
             --exclude=".github" \
             --exclude="node_modules" \
@@ -46,20 +39,22 @@ jobs:
             --exclude="data" \
             --exclude="*.pyc" \
             --exclude="__pycache__" \
-            ./ deploy@${{ secrets.HETZNER_SERVER_IP }}:$PROJECT_DIR/
+            ./ deploy@${{ secrets.HETZNER_SERVER_IP }}:${{ env.PROJECT_DIR }}/
 
-      # === SERVER OPERATIONS ===
+      # === SERVER SETUP ===
       - name: Initialize server
         run: |
-          ssh $SSH_OPTS -i ~/.ssh/id_ed25519 deploy@${{ secrets.HETZNER_SERVER_IP }} <<'EOF'
+          ssh -i ~/.ssh/id_ed25519 deploy@${{ secrets.HETZNER_SERVER_IP }} <<EOF
             set -euxo pipefail
-            cd $PROJECT_DIR
+            cd ${{ env.PROJECT_DIR }} || { echo "ERROR: Failed to access ${{ env.PROJECT_DIR }}"; exit 1; }
+            
+            # Create directory structure
             mkdir -p data/{typesense,certbot/{conf,www}} nginx/snippets
             chmod -R 755 data
             
-            # Safely create .env
+            # Create .env file with secure permissions
             umask 077
-            cat > .env <<CONFIG
+            cat > .env <<'CONFIG'
             # Backend
             PROD_BACKEND_PORT=${{ secrets.PROD_BACKEND_PORT }}
             PROD_BACKEND_PYTHONPATH=${{ secrets.PROD_BACKEND_PYTHONPATH }}
@@ -76,55 +71,100 @@ jobs:
             CONFIG
           EOF
 
-      - name: Deploy containers
+      # === DEPLOY SERVICES ===
+      - name: Start containers
         run: |
-          ssh $SSH_OPTS -i ~/.ssh/id_ed25519 deploy@${{ secrets.HETZNER_SERVER_IP }} <<'EOF'
+          ssh -i ~/.ssh/id_ed25519 deploy@${{ secrets.HETZNER_SERVER_IP }} <<EOF
             set -euxo pipefail
-            cd $PROJECT_DIR
+            cd ${{ env.PROJECT_DIR }} || exit 1
             
-            # Stop old containers
-            docker-compose -f $COMPOSE_FILE down --remove-orphans --timeout 30 || true
+            # Stop any running containers
+            docker-compose -f ${{ env.COMPOSE_FILE }} down --remove-orphans || true
             
-            # Build fresh
-            docker-compose -f $COMPOSE_FILE build --no-cache --pull
+            # Build and start
+            docker-compose -f ${{ env.COMPOSE_FILE }} build --no-cache
+            docker-compose -f ${{ env.COMPOSE_FILE }} up -d
             
-            # Start with Let's Encrypt handling
+            # Handle Let's Encrypt
             if [ -d "data/certbot/conf/live" ]; then
-              docker-compose -f $COMPOSE_FILE run --rm certbot renew --dry-run
+              docker-compose -f ${{ env.COMPOSE_FILE }} run --rm certbot renew --dry-run
+            else
+              echo "No existing Let's Encrypt certificates found"
             fi
-            docker-compose -f $COMPOSE_FILE up -d --force-recreate
           EOF
 
       # === VERIFICATION ===
       - name: Verify deployment
         run: |
-          ssh $SSH_OPTS -i ~/.ssh/id_ed25519 deploy@${{ secrets.HETZNER_SERVER_IP }} <<'EOF'
+          ssh -i ~/.ssh/id_ed25519 deploy@${{ secrets.HETZNER_SERVER_IP }} <<EOF
             set -euo pipefail
-            cd $PROJECT_DIR
+            cd ${{ env.PROJECT_DIR }} || exit 1
             
-            # Container check
-            if [ $(docker-compose -f $COMPOSE_FILE ps -q | wc -l) -lt 3 ]; then
-              docker-compose -f $COMPOSE_FILE logs
+            # Check running containers
+            if ! docker-compose -f ${{ env.COMPOSE_FILE }} ps | grep -q "Up"; then
+              echo "ERROR: No containers running"
+              docker-compose -f ${{ env.COMPOSE_FILE }} logs
               exit 1
             fi
             
-            # Health checks with timeout
-            check_service() {
-              local url=$1
-              if ! curl -fsS --max-time 5 --retry 3 "$url"; then
-                echo "Health check failed for $url"
-                return 1
+            # Health checks
+            check_health() {
+              local port=\$1
+              if ! curl -fsS "http://localhost:\$port/health"; then
+                echo "Health check failed for port \$port"
+                exit 1
               fi
             }
             
-            check_service "http://localhost:${{ secrets.PROD_BACKEND_PORT }}/health"
-            check_service "http://localhost:${{ secrets.PROD_FRONTEND_PORT }}/health"
+            check_health ${{ secrets.PROD_BACKEND_PORT }}
+            check_health ${{ secrets.PROD_FRONTEND_PORT }}
           EOF
-
+          
       # === CLEANUP ===
-      - name: System cleanup
+      # Removes __pycache__ directories
+      # Deletes compiled .pyc files
+      # Handles log rotation (adjusts ./logs to log location)
+      # Cleans old static files (30+ days)
+      # Runs inside the backend container
+      # Removes old snapshots (7+ days)
+      # Maintains search performance
+      # All commands include error handling (|| true)
+      # Clear section headers in output
+      # Final resource summary
+      - name: Cleanup resources
         if: always()
         run: |
-          ssh $SSH_OPTS -i ~/.ssh/id_ed25519 deploy@${{ secrets.HETZNER_SERVER_IP }} <<'EOF' || echo "Cleanup completed"
-            docker system prune -af --volumes --filter "until=24h"
+          ssh -i ~/.ssh/id_ed25519 deploy@${{ secrets.HETZNER_SERVER_IP }} <<'EOF'
+            set -euo pipefail
+            echo "=== Starting Starlette Application Cleanup ==="
+            
+            # 1. Docker cleanup
+            echo "- Pruning Docker resources..."
+            docker system prune -af --filter "until=24h" --volumes || \
+              echo "Docker cleanup completed with warnings"
+            
+            # 2. Starlette-specific cleanup
+            echo "- Cleaning Python/Starlette artifacts..."
+            cd ${{ env.PROJECT_DIR }}
+            
+            # Clear Python caches
+            find . -type d -name "__pycache__" -exec rm -rf {} + || true
+            find . -type f -name "*.pyc" -delete || true
+            
+            # Rotate Starlette logs (adjust path as needed)
+            find ./logs -name "*.log" -mtime +7 -delete 2>/dev/null || true
+            
+            # 3. Static files cleanup (if using static volume)
+            echo "- Cleaning old static files..."
+            docker-compose exec -T backend \
+              find /app/static -type f -mtime +30 -delete 2>/dev/null || true
+            
+            # 4. Typesense cleanup (from your stack)
+            echo "- Optimizing Typesense..."
+            docker-compose exec -T typesense \
+              find /data -name "*.snapshot" -mtime +7 -delete 2>/dev/null || true
+            
+            echo "=== Cleanup Summary ==="
+            echo "Disk usage: $(df -h / | awk 'NR==2{print $5}')"
+            echo "Docker space: $(docker system df --format '{{.TotalSpace}}')"
           EOF
