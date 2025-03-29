@@ -1,0 +1,61 @@
+# docker-compose.prod.yml
+services:
+  typesense:
+    extends:
+      file: docker-compose.yml
+      service: typesense
+    environment:
+      - TYPESENSE_API_KEY=${PROD_TYPESENSE_API_KEY}
+      - TYPESENSE_DATA_DIR=${PROD_TYPESENSE_DATA_DIR}
+
+  backend:
+    extends:
+      file: docker-compose.yml
+      service: backend
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.prod
+    environment:
+      - PYTHONPATH=${PROD_BACKEND_PYTHONPATH}
+      - TYPESENSE_HOST=typesense
+      - TYPESENSE_PORT=8108
+      - TYPESENSE_API_KEY=${PROD_TYPESENSE_API_KEY}
+      - BACKEND_PORT=8000
+      - TYPESENSE_PROTOCOL=http
+    volumes:
+      - static_volume:/app/src/app/static:ro
+
+  frontend:
+    extends:
+      file: docker-compose.yml
+      service: frontend
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile.prod
+    environment:
+      - PYTHONPATH=${PROD_FRONTEND_PYTHONPATH}
+      - FRONTEND_PORT=8001
+    volumes:
+      - static_volume:/var/www/static:ro
+
+  nginx:
+    extends:
+      file: docker-compose.yml
+      service: nginx
+    volumes:
+      - ./nginx/nginx.prod.conf:/etc/nginx/nginx.conf
+      - ./nginx/snippets:/etc/nginx/snippets
+      - static_volume:/var/www/static
+      - certbot_www:/var/www/certbot
+      - certbot_conf:/etc/letsencrypt
+
+  certbot:
+    extends:
+      file: docker-compose.yml
+      service: certbot
+
+volumes:
+  typesense_data:
+  static_volume:
+  certbot_www:
+  certbot_conf:

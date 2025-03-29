@@ -1,46 +1,71 @@
 # backend/src/app/main.py
-from starlette.applications import Starlette
-from starlette.routing import Route
-from starlette.responses import JSONResponse
-from .routes.search import search
-from .routes.upload import upload
-from dotenv import load_dotenv
 import os
+import sys
+from pathlib import Path
+from dotenv import load_dotenv
+from starlette.applications import Starlette
+from starlette.routing import Route, Mount
+from starlette.responses import JSONResponse
+from starlette.staticfiles import StaticFiles
 
-# Always load .env, production values will come from environment
-load_dotenv('../.env')
+# Add project root to Python path
+PROJECT_ROOT = Path(__file__).parent.parent.parent.parent  # points to pers/
+sys.path.insert(0, str(PROJECT_ROOT))
 
-# Load environment variables (fall back to non-prefixed versions for local development)
-TYPESENSE_API_KEY = os.getenv('PROD_TYPESENSE_API_KEY') or os.getenv('TYPESENSE_API_KEY')
-TYPESENSE_HOST = os.getenv('PROD_TYPESENSE_HOST') or os.getenv('TYPESENSE_HOST')
-TYPESENSE_PORT = os.getenv('PROD_TYPESENSE_PORT') or os.getenv('TYPESENSE_PORT')
-BACKEND_PORT = os.getenv('PROD_BACKEND_PORT') or os.getenv('BACKEND_PORT')
+# Absolute imports
+from backend.src.app.routes.search import search
+from backend.src.app.routes.upload import upload
 
-# Health check endpoint
+# Environment setup
+load_dotenv(PROJECT_ROOT / '.env')
+
+config = {
+    "PORT": int(os.getenv('PROD_BACKEND_PORT', 8000)),
+    "DEBUG": os.getenv('DEBUG', 'false').lower() in ('true', '1', 't'),
+    "TYPESENSE": {
+        "API_KEY": os.getenv('PROD_TYPESENSE_API_KEY'),
+        "HOST": os.getenv('PROD_TYPESENSE_HOST', 'typesense'),
+        "PORT": os.getenv('PROD_TYPESENSE_PORT', '8108')
+    },
+    "STATIC_DIR": "/app/static"  # This matches your volume mount
+}
+
+
+# Application endpoints
 async def health_check(request):
     return JSONResponse({"status": "healthy"})
 
-# Root endpoint
-async def root(request):
-    return JSONResponse({"message": "Backend API", "endpoints": {
-        "/health": "GET - Health check",
-        "/search": "GET - Search endpoint",
-        "/upload": "POST - Upload endpoint"
-    }})
 
-# Routes
+async def root(request):
+    return JSONResponse({
+        "message": "Backend API",
+        "endpoints": {
+            "/": "GET - API documentation",
+            "/health": "GET - Service health",
+            "/search": "GET - Search endpoint",
+            "/upload": "POST - Upload endpoint",
+            "/static": "GET - Static files"
+        }
+    })
+
 routes = [
     Route("/", root),
     Route("/health", health_check),
     Route("/search", search, methods=["GET"]),
     Route("/upload", upload, methods=["POST"]),
+    Mount("/static", StaticFiles(directory=config["STATIC_DIR"]), name="static"),
 ]
 
+app = Starlette(
+    debug=config["DEBUG"],
+    routes=routes
+)
 
-# Initialize Starlette app with routes
-app = Starlette(debug=True, routes=routes)
-
-# frontend/src/app/main.py
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(
+        "backend.src.app.main:app",
+        host="0.0.0.0",
+        port=config["PORT"],
+        reload=config["DEBUG"]
+    )

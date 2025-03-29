@@ -1,14 +1,18 @@
 # .github/workflows/deploy.yml
-name: Deploy to Hetzner
+name: Deploy to Production
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
+
+env:
+  PROJECT_DIR: /opt/pers
+  COMPOSE_FILE: docker-compose.prod.yml
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     steps:
       - name: Checkout code
@@ -24,49 +28,109 @@ jobs:
         with:
           ssh-private-key: ${{ secrets.HETZNER_SSH_KEY }}
 
-      - name: Deploy to Hetzner
+      - name: Rsync code to server
         run: |
           rsync -avz --delete \
             --exclude=".git" \
+            --exclude=".github" \
             --exclude="node_modules" \
-            ./ deploy@${{ secrets.HETZNER_SERVER_IP }}:/opt/pers/
+            --exclude=".env" \
+            --exclude="data" \
+            --exclude="*.pyc" \
+            --exclude="__pycache__" \
+            ./ deploy@${{ secrets.HETZNER_SERVER_IP }}:$PROJECT_DIR/
 
-      - name: Prepare Server Environment
+      - name: Prepare server environment
         run: |
           ssh deploy@${{ secrets.HETZNER_SERVER_IP }} << 'ENDSSH'
-            cd /opt/pers
-            mkdir -p data/typesense nginx/snippets
+            set -euo pipefail
+            cd $PROJECT_DIR
+            
+            # Create necessary directories
+            mkdir -p data/typesense data/certbot/{conf,www} nginx/snippets
             chmod -R 755 data
+            
+            # Create or update .env file for Starlette
+            cat << EOF > .env
+            # Backend
+            PROD_BACKEND_PORT=${{ secrets.PROD_BACKEND_PORT }}
+            PROD_BACKEND_PYTHONPATH=${{ secrets.PROD_BACKEND_PYTHONPATH }}
+            
+            # Frontend
+            PROD_FRONTEND_PORT=${{ secrets.PROD_FRONTEND_PORT }}
+            PROD_FRONTEND_PYTHONPATH=${{ secrets.PROD_FRONTEND_PYTHONPATH }}
+            
+            # Typesense
+            PROD_TYPESENSE_API_KEY=${{ secrets.PROD_TYPESENSE_API_KEY }}
+            PROD_TYPESENSE_DATA_DIR=${{ secrets.PROD_TYPESENSE_DATA_DIR }}
+            PROD_TYPESENSE_HOST=typesense  # Using container name for internal communication
+            PROD_TYPESENSE_PORT=8108       # Default Typesense port
+            EOF
+            
+            # Set proper permissions
+            chmod 600 .env
           ENDSSH
 
-      - name: Initialize Services
+      - name: Build and deploy services
         run: |
           ssh deploy@${{ secrets.HETZNER_SERVER_IP }} << 'ENDSSH'
-            cd /opt/pers
+            set -euo pipefail
+            cd $PROJECT_DIR
             
-            # Build containers first
-            docker-compose build
+            # Stop existing containers if running
+            docker-compose -f $COMPOSE_FILE down || true
             
-            # Prepare static files
-            docker-compose run --rm frontend sh -c "mkdir -p /var/www/static && cp -r /app/src/app/static/* /var/www/static/"
-            
-            # Set environment variables
-            export TYPESENSE_API_KEY=${{ secrets.PROD_TYPESENSE_API_KEY }}
-            export TYPESENSE_DATA_DIR=${{ secrets.PROD_TYPESENSE_DATA_DIR }}
-            export TYPESENSE_HOST=${{ secrets.PROD_TYPESENSE_HOST }}
-            export TYPESENSE_PORT=${{ secrets.PROD_TYPESENSE_PORT }}
-            export BACKEND_PORT=${{ secrets.PROD_BACKEND_PORT }}
-            export FRONTEND_PORT=${{ secrets.PROD_FRONTEND_PORT }}
-            export BACKEND_PYTHONPATH=${{ secrets.PROD_BACKEND_PYTHONPATH }}
-            export FRONTEND_PYTHONPATH=${{ secrets.PROD_FRONTEND_PYTHONPATH }}
-            export TYPESENSE_PROTOCOL=${{ secrets.PROD_TYPESENSE_PROTOCOL }}
+            # Build containers with no-cache to ensure fresh builds
+            docker-compose -f $COMPOSE_FILE build --no-cache
             
             # Initialize Let's Encrypt if needed
-            if [ ! -d "letsencrypt-live" ]; then
+            if [ ! -d "data/certbot/conf/live" ]; then
+              echo "Initializing Let's Encrypt certificates..."
               chmod +x init-letsencrypt.sh
               ./init-letsencrypt.sh
+            else
+              echo "Existing Let's Encrypt certificates found"
+              # Start services
+              docker-compose -f $COMPOSE_FILE up -d --force-recreate
+              
+              # Renew certificates in case they're close to expiry
+              docker-compose -f $COMPOSE_FILE run --rm certbot renew --dry-run
             fi
             
-            # Start services
-            docker-compose up -d
+            # Verify services are running
+            docker-compose -f $COMPOSE_FILE ps
+          ENDSSH
+
+      - name: Verify deployment
+        run: |
+          ssh deploy@${{ secrets.HETZNER_SERVER_IP }} << 'ENDSSH'
+            set -euo pipefail
+            cd $PROJECT_DIR
+            
+            # Check containers are running
+            running_containers=$(docker-compose -f $COMPOSE_FILE ps -q | wc -l)
+            if [ "$running_containers" -lt 3 ]; then
+              echo "Error: Not all containers are running"
+              docker-compose -f $COMPOSE_FILE logs
+              exit 1
+            fi
+            
+            # Basic health check for Starlette services
+            echo "Testing backend health..."
+            curl -fsSL http://localhost:${{ secrets.PROD_BACKEND_PORT }}/health || \
+              (echo "Backend health check failed" && exit 1)
+            
+            echo "Testing frontend health..."
+            curl -fsSL http://localhost:${{ secrets.PROD_FRONTEND_PORT }}/health || \
+              (echo "Frontend health check failed" && exit 1)
+          ENDSSH
+
+      - name: Clean up old containers and images
+        run: |
+          ssh deploy@${{ secrets.HETZNER_SERVER_IP }} << 'ENDSSH'
+            set -euo pipefail
+            # Remove unused containers
+            docker container prune -f
+            # Remove unused images
+            docker image prune -af
           ENDSSH

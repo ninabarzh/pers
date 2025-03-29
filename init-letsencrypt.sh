@@ -1,21 +1,30 @@
 #!/bin/bash
 set -euo pipefail
 
+DOMAIN="finder.green"
+EMAIL="nina@tymyrddin.dev"
+
 echo "=== Initializing Let's Encrypt Certificates ==="
 
 # Create required directories
-mkdir -p letsencrypt-live nginx/snippets
-chmod 755 letsencrypt-live
+mkdir -p data/certbot/conf data/certbot/www
+chmod -R 755 data/certbot
+
+# Start nginx in temporary mode for ACME challenge
+echo "Starting temporary nginx for certificate issuance..."
+docker-compose -f docker-compose.prod.yml up --force-recreate --no-deps -d nginx
 
 echo "Requesting certificates from Let's Encrypt..."
-docker-compose run --rm certbot sh -c \
-  "certbot certonly --webroot -w /var/www/certbot \
-  -d finder.green -d www.finder.green \
-  --email nina@tymyrddin.dev --agree-tos --non-interactive \
-  && cp -Lr /etc/letsencrypt/live /etc/letsencrypt/live-copy \
-  && chmod -R 755 /etc/letsencrypt/live-copy"
+docker-compose -f docker-compose.prod.yml run --rm --entrypoint "\
+  certbot certonly --webroot -w /var/www/certbot \
+  --email ${EMAIL} --agree-tos --non-interactive \
+  -d ${DOMAIN} -d www.${DOMAIN}" certbot
+
+# Replace nginx configuration with production version
+echo "Configuring nginx for production..."
+docker-compose -f docker-compose.prod.yml up -d --force-recreate --no-deps nginx
 
 echo "Starting all services in production mode..."
-docker-compose up -d --build
+docker-compose -f docker-compose.prod.yml up -d --build
 
 echo "=== Setup completed successfully ==="

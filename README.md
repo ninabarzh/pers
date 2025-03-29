@@ -119,6 +119,7 @@ docker-compose -f docker-compose.dev.yml --profile test up backend-tests fronten
 - [ ] Consider scaling Typesense horizontally by adding more nodes to the cluster.
 - [ ] Set up regular backups of the Typesense data directory to ensure data safety.
 - [ ] Add monitoring and alerting for Typesense to track performance and detect issues early.
+- [ ] Implement a blue-green deployment strategy
 
 #### Further development
 - [ ] Add user authentication to restrict access to the upload page.

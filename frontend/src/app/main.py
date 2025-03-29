@@ -1,40 +1,49 @@
 # frontend/src/app/main.py
+import os
+import sys
+from pathlib import Path
+from dotenv import load_dotenv
 from starlette.applications import Starlette
 from starlette.routing import Route, Mount
-from starlette.staticfiles import StaticFiles
 from starlette.responses import JSONResponse
-import os
-from .routes.home import home
-from .routes.upload import upload_page, handle_upload
-from dotenv import load_dotenv
-import os
+from starlette.staticfiles import StaticFiles
 
-# Always load .env, production values will come from environment
-load_dotenv('../.env')
+# Add project root to Python path
+PROJECT_ROOT = Path(__file__).parent.parent.parent.parent  # points to pers/
+sys.path.insert(0, str(PROJECT_ROOT))
 
-# Access environment variables
-FRONTEND_PORT = os.getenv('FRONTEND_PORT')
+# Absolute imports
+from frontend.src.app.routes.home import home
+from frontend.src.app.routes.upload import upload_page, handle_upload
 
-# Define the path to the static directory
-static_dir = os.path.join(os.path.dirname(__file__), "static")
+# Environment setup
+load_dotenv(PROJECT_ROOT / '.env')
 
+config = {
+    "PORT": int(os.getenv('PROD_FRONTEND_PORT', 8001)),
+    "DEBUG": os.getenv('DEBUG', 'false').lower() in ('true', '1', 't'),
+    "STATIC_DIR": PROJECT_ROOT / "frontend" / "src" / "app" / "static"
+}
 
-# Health check endpoint
-async def health_check(request):
-    return JSONResponse({"status": "healthy"})
-
-# Routes
+# Application routes
 routes = [
-    Route("/health", health_check),
     Route("/", home, methods=["GET"]),
+    Route("/health", lambda r: JSONResponse({"status": "healthy"})),
     Route("/upload", upload_page, methods=["GET"]),
     Route("/upload", handle_upload, methods=["POST"]),
-    Mount("/static", StaticFiles(directory=static_dir), name="static"),  # Serve static files
+    Mount("/static", StaticFiles(directory=str(config["STATIC_DIR"])), name="static"),
 ]
 
-app = Starlette(debug=True, routes=routes)
+app = Starlette(
+    debug=config["DEBUG"],
+    routes=routes
+)
 
-# frontend/src/app/main.py
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8001)
+    uvicorn.run(
+        "frontend.src.app.main:app",
+        host="0.0.0.0",
+        port=config["PORT"],
+        reload=config["DEBUG"]
+    )
