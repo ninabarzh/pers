@@ -139,36 +139,39 @@ jobs:
       - name: Clean up old containers
         if: always()
         run: |
-          # Set up SSH environment from scratch
+          # Set up SSH environment safely
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
           
-          # Create known_hosts with proper formatting
-          {
-            echo "Host ${{ secrets.HETZNER_SERVER_IP }}"
-            echo "  HostName ${{ secrets.HETZNER_SERVER_IP }}"
-            echo "  User deploy"
-            echo "  IdentityFile ~/.ssh/id_ed25519"
-            echo "  StrictHostKeyChecking yes"
-            echo "  UserKnownHostsFile ~/.ssh/known_hosts"
-            echo "${{ secrets.HETZNER_SERVER_IP }} ${{ secrets.HETZNER_SERVER_FINGERPRINT }}"
-          } > ~/.ssh/config
+          # Write the fingerprint without any formatting
+          echo "${{ secrets.HETZNER_SERVER_IP }} ${{ secrets.HETZNER_SERVER_FINGERPRINT }}" > ~/.ssh/known_hosts
           
-          echo "${{ secrets.HETZNER_SERVER_FINGERPRINT }}" > ~/.ssh/known_hosts
+          # Write the private key safely
           echo "${{ secrets.HETZNER_SSH_KEY }}" > ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/{config,known_hosts,id_ed25519}
           
-          # Test connection first
-          if ! ssh -T -F ~/.ssh/config ${{ secrets.HETZNER_SERVER_IP }} echo "Connection test successful"; then
+          # Set strict permissions
+          chmod 600 ~/.ssh/{known_hosts,id_ed25519}
+          
+          # Simple connection test
+          if ! ssh -T -o StrictHostKeyChecking=yes \
+                   -o UserKnownHostsFile=~/.ssh/known_hosts \
+                   -i ~/.ssh/id_ed25519 \
+                   deploy@${{ secrets.HETZNER_SERVER_IP }} echo "Testing connection..."; then
             echo "::error::SSH connection failed"
+            echo "Debug info:"
+            echo "Fingerprint used: $(cat ~/.ssh/known_hosts)"
+            echo "Key type: $(ssh-keygen -l -f ~/.ssh/id_ed25519)"
             exit 1
           fi
           
-          # Execute cleanup commands
-          ssh -T -F ~/.ssh/config ${{ secrets.HETZNER_SERVER_IP }} <<'EOF'
+          # Execute cleanup
+          ssh -T -o StrictHostKeyChecking=yes \
+              -o UserKnownHostsFile=~/.ssh/known_hosts \
+              -i ~/.ssh/id_ed25519 \
+              deploy@${{ secrets.HETZNER_SERVER_IP }} <<'EOF'
             set -ex
             echo "Starting cleanup..."
-            docker container prune -f
-            docker image prune -af
-            echo "Cleanup complete"
+            docker container prune -f || echo "Container prune failed (but continuing)"
+            docker image prune -af || echo "Image prune failed (but continuing)"
+            echo "Cleanup completed"
           EOF
