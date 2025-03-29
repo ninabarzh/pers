@@ -135,43 +135,68 @@ jobs:
             done
           ENDSSH
 
-      # === CLEANUP ===
+      # === CLEANUP WITH COMPLETE DEBUGGING ===
       - name: Clean up old containers
         if: always()
         run: |
-          # Set up SSH environment safely
-          mkdir -p ~/.ssh
-          chmod 700 ~/.ssh
+          # 1. Setup isolated SSH environment
+          DEBUG_DIR="$HOME/ssh_debug_$(date +%s)"
+          mkdir -p "$DEBUG_DIR"
+          chmod 700 "$DEBUG_DIR"
           
-          # Write the fingerprint without any formatting
-          echo "${{ secrets.HETZNER_SERVER_IP }} ${{ secrets.HETZNER_SERVER_FINGERPRINT }}" > ~/.ssh/known_hosts
+          # 2. Get ACTUAL server fingerprint
+          echo "== Getting LIVE server fingerprint =="
+          ssh-keyscan -t ed25519 ${{ secrets.HETZNER_SERVER_IP }} > "$DEBUG_DIR/actual_fingerprint"
+          echo "Live fingerprint:"
+          cat "$DEBUG_DIR/actual_fingerprint"
           
-          # Write the private key safely
-          echo "${{ secrets.HETZNER_SSH_KEY }}" > ~/.ssh/id_ed25519
+          # 3. Compare with our stored fingerprint
+          echo "== Fingerprint Comparison =="
+          echo "Stored in secret: ${{ secrets.HETZNER_SERVER_FINGERPRINT }}"
+          echo "Actual from server: $(cat "$DEBUG_DIR/actual_fingerprint")"
           
-          # Set strict permissions
-          chmod 600 ~/.ssh/{known_hosts,id_ed25519}
+          # 4. Create SSH config
+          {
+            echo "Host target-server"
+            echo "  HostName ${{ secrets.HETZNER_SERVER_IP }}"
+            echo "  User deploy"
+            echo "  IdentityFile $DEBUG_DIR/id_ed25519"
+            echo "  StrictHostKeyChecking yes"
+            echo "  UserKnownHostsFile $DEBUG_DIR/known_hosts"
+            echo "  LogLevel DEBUG3"
+          } > "$DEBUG_DIR/config"
           
-          # Simple connection test
-          if ! ssh -T -o StrictHostKeyChecking=yes \
-                   -o UserKnownHostsFile=~/.ssh/known_hosts \
-                   -i ~/.ssh/id_ed25519 \
-                   deploy@${{ secrets.HETZNER_SERVER_IP }} echo "Testing connection..."; then
-            echo "::error::SSH connection failed"
-            echo "Debug info:"
-            echo "Fingerprint used: $(cat ~/.ssh/known_hosts)"
-            echo "Key type: $(ssh-keygen -l -f ~/.ssh/id_ed25519)"
-            exit 1
-          fi
+          # 5. Write key files
+          echo "${{ secrets.HETZNER_SSH_KEY }}" > "$DEBUG_DIR/id_ed25519"
+          cat "$DEBUG_DIR/actual_fingerprint" > "$DEBUG_DIR/known_hosts"
+          chmod 600 "$DEBUG_DIR"/*
           
-          # Execute cleanup
-          ssh -T -o StrictHostKeyChecking=yes \
-              -o UserKnownHostsFile=~/.ssh/known_hosts \
-              -i ~/.ssh/id_ed25519 \
-              deploy@${{ secrets.HETZNER_SERVER_IP }} <<'EOF'
+          # 6. Full debug output
+          echo "== SSH Configuration =="
+          ls -la "$DEBUG_DIR"
+          echo "--- Config file ---"
+          cat "$DEBUG_DIR/config"
+          echo "--- Private key ---"
+          head -n 2 "$DEBUG_DIR/id_ed25519"
+          echo "..."
+          tail -n 2 "$DEBUG_DIR/id_ed25519"
+          echo "--- Known hosts ---"
+          cat "$DEBUG_DIR/known_hosts"
+          
+          # 7. Connection test
+          echo "== Testing Connection =="
+          ssh -T -F "$DEBUG_DIR/config" -v target-server <<'EOF'
+            echo "Connection successful!"
+            echo "Running as: $(whoami)"
+            echo "Docker version: $(docker --version || echo 'No docker')"
+          EOF
+          
+          # 8. Only proceed if test succeeds
+          echo "== Executing Cleanup =="
+          ssh -T -F "$DEBUG_DIR/config" target-server <<'EOF'
             set -ex
             echo "Starting cleanup..."
-            docker container prune -f || echo "Container prune failed (but continuing)"
-            docker image prune -af || echo "Image prune failed (but continuing)"
-            echo "Cleanup completed"
+            docker container prune -f
+            docker image prune -af
+            echo "Cleanup completed successfully"
           EOF
