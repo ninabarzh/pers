@@ -36,6 +36,7 @@ services:
       BACKEND_PORT: ${PROD_BACKEND_PORT:-8000}
       TYPESENSE_PROTOCOL: http
       # timeout/retry parameters
+      STARTUP_DELAY: 15  # Increase if needed
       BACKEND_STARTUP_DELAY: 10
       TYPESENSE_CONNECTION_TIMEOUT: 30
       TYPESENSE_HEALTHCHECK_RETRIES: 5
@@ -52,7 +53,10 @@ services:
       interval: 30s
       timeout: 30s
       retries: 5
-      start_period: 60s
+      start_period: 90s  # Extended initial period
+    depends_on:
+      typesense:
+        condition: service_healthy
 
   frontend:
     extends:

@@ -84,23 +84,33 @@ jobs:
           fi
           cat backend/requirements.txt
 
-      - name: Build and start containers
+      - name: Start containers
         run: |
           ssh -i ~/.ssh/id_ed25519 deploy@${{ secrets.HETZNER_SERVER_IP }} <<'EOF'
             set -euxo pipefail
             cd ${{ env.PROJECT_DIR }}
             
-            # Verify files exist
-            ls -la backend/requirements.txt
+            # Clean rebuild
+            docker compose -f ${{ env.COMPOSE_FILE }} build --no-cache backend
             
-            # Build with cache
-            docker compose -f ${{ env.COMPOSE_FILE }} build backend
+            # Start services with proper ordering
+            docker compose -f ${{ env.COMPOSE_FILE }} up -d typesense
+            sleep 30  # Wait for Typesense
             
-            # Start services
-            docker compose -f ${{ env.COMPOSE_FILE }} up -d --wait
+            # Start backend with retries
+            for i in {1..3}; do
+              docker compose -f ${{ env.COMPOSE_FILE }} up -d backend && break || sleep 15
+            done
             
-            # Verify running
-            docker compose -f ${{ env.COMPOSE_FILE }} ps
+            # Extended verification
+            sleep 30  # Additional grace period
+            if ! docker compose -f ${{ env.COMPOSE_FILE }} ps backend | grep -q "(healthy)"; then
+              echo "Backend health check failed. Logs:"
+              docker compose -f ${{ env.COMPOSE_FILE }} logs backend
+              echo "Trying direct health check:"
+              curl -v http://localhost:${{ secrets.PROD_BACKEND_PORT }}/health || true
+              exit 1
+            fi
           EOF
 
       # === VERIFICATION ===
