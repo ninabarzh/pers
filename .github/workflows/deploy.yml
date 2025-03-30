@@ -20,6 +20,12 @@ jobs:
         curl -L "https://github.com/docker/compose/releases/download/v2.23.0/docker-compose-linux-$(uname -m)" -o /usr/local/bin/docker-compose
         chmod +x /usr/local/bin/docker-compose
 
+    - name: Verify file structure
+      run: |
+        ls -la
+        ls -la backend/
+        ls -la frontend/
+
     - name: Generate production .env
       run: |
         cat <<EOF > .env.prod
@@ -35,9 +41,15 @@ jobs:
         DOMAIN=${{ secrets.PROD_DOMAIN }}
         EOF
 
-    - name: Build production images
+    - name: Build backend image
+      working-directory: ./backend
       run: |
-        docker-compose -f docker-compose.yml -f docker-compose.prod.yml build --no-cache
+        docker build -f Dockerfile.prod -t backend-prod .
+
+    - name: Build frontend image
+      working-directory: ./frontend
+      run: |
+        docker build -f Dockerfile.prod -t frontend-prod .
 
     - name: Setup SSH
       uses: webfactory/ssh-agent@v0.7.0
@@ -46,16 +58,12 @@ jobs:
 
     - name: Deploy to Hetzner
       run: |
-        ssh -o StrictHostKeyChecking=no \
-            ${{ secrets.HETZNER_USER }}@${{ secrets.HETZNER_SERVER_IP }} \
-            "mkdir -p ~/app && chmod 700 ~/app"
-        
+        # Transfer all files
         rsync -avz --delete \
-              --exclude=.git \
-              --exclude=.github \
               -e "ssh -o StrictHostKeyChecking=no" \
-              ./ ${{ secrets.HETZNER_USER }}@${{ secrets.HETZNER_SERVER_IP }}:~/app/
+              . ${{ secrets.HETZNER_USER }}@${{ secrets.HETZNER_SERVER_IP }}:~/app/
 
+        # Run deployment commands
         ssh -o StrictHostKeyChecking=no \
             ${{ secrets.HETZNER_USER }}@${{ secrets.HETZNER_SERVER_IP }} \
             "cd ~/app && \
