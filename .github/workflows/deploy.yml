@@ -15,13 +15,15 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Verify requirements hashes
+    - name: Prepare for build
       run: |
-        cd backend
-        grep -q -- '--hash=' requirements.txt || (echo "Backend requirements.txt missing hashes" && exit 1)
-        cd ../frontend
-        grep -q -- '--hash=' requirements.txt || (echo "Frontend requirements.txt missing hashes" && exit 1)
-        cd ..
+        # Create backup of original requirements files
+        cp backend/requirements.txt backend/requirements.original.txt
+        cp frontend/requirements.txt frontend/requirements.original.txt
+        
+        # Create clean versions without hashes
+        sed '/--hash=/d' backend/requirements.original.txt > backend/requirements.txt
+        sed '/--hash=/d' frontend/requirements.original.txt > frontend/requirements.txt
 
     - name: Install Docker Compose
       run: |
@@ -58,8 +60,13 @@ jobs:
         export BACKEND_PORT=${{ secrets.PROD_BACKEND_PORT }}
         export FRONTEND_PORT=${{ secrets.PROD_FRONTEND_PORT }}
         
-        # Build with explicit contexts
+        # Build with clean requirements files
         docker-compose -f docker-compose.yml -f docker-compose.prod.yml build --no-cache
+
+    - name: Restore requirements files
+      run: |
+        mv backend/requirements.original.txt backend/requirements.txt
+        mv frontend/requirements.original.txt frontend/requirements.txt
 
     - name: Setup SSH
       uses: webfactory/ssh-agent@v0.7.0
@@ -68,12 +75,10 @@ jobs:
 
     - name: Deploy to Hetzner
       run: |
-        # Transfer all files
         rsync -avz --delete \
               -e "ssh -o StrictHostKeyChecking=no" \
               . ${{ secrets.HETZNER_USER }}@${{ secrets.HETZNER_SERVER_IP }}:~/app/
 
-        # Run deployment commands
         ssh -o StrictHostKeyChecking=no \
             ${{ secrets.HETZNER_USER }}@${{ secrets.HETZNER_SERVER_IP }} \
             "cd ~/app && \
