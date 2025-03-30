@@ -26,6 +26,11 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
+# Install runtime dependencies
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends gcc && \
+    rm -rf /var/lib/apt/lists/*
+
 # Copy virtual environment from builder
 COPY --from=builder /opt/venv /opt/venv
 
@@ -40,11 +45,11 @@ RUN useradd -u 1000 -m myuser && \
 ENV PATH="/opt/venv/bin:$PATH" \
     PYTHONPATH="/app/src"
 
-# Verify uvicorn is in PATH (debugging step)
-RUN which uvicorn || { echo "Uvicorn not found in PATH"; exit 1; }
+# Verification step
+RUN /opt/venv/bin/python -c "import uvicorn; print(f'Uvicorn version: {uvicorn.__version__}')"
 
 USER myuser
 
 EXPOSE 8000
 
-CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["/opt/venv/bin/uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000"]
