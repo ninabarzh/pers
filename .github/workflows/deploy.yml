@@ -13,7 +13,7 @@ jobs:
 
     steps:
     # ======================
-    # SETUP PHASE
+    # SETUP & BUILD
     # ======================
     - name: Checkout code
       uses: actions/checkout@v4
@@ -23,15 +23,11 @@ jobs:
 
     - name: Install Docker Compose
       run: |
-        # Install Docker Compose v2
         mkdir -p ~/.docker/cli-plugins/
-        curl -SL https://github.com/docker/compose/releases/download/v2.23.0/docker-compose-linux-x86_64 -o ~/.docker/cli-plugins/docker-compose
+        curl -SL https://github.com/docker/compose/releases/download/v2.23.0/docker-compose-linux-x86_64 \
+          -o ~/.docker/cli-plugins/docker-compose
         chmod +x ~/.docker/cli-plugins/docker-compose
-        docker compose version
 
-    # ======================
-    # BUILD PHASE
-    # ======================
     - name: Generate production .env
       run: |
         cat <<EOF > .env.prod
@@ -54,7 +50,7 @@ jobs:
         docker compose -f docker-compose.prod.yml build
 
     # ======================
-    # DEPLOYMENT PHASE
+    # DEPLOYMENT
     # ======================
     - name: Setup SSH
       uses: webfactory/ssh-agent@v0.7.0
@@ -66,33 +62,67 @@ jobs:
         rsync -avz --delete \
           --exclude='.git' \
           --exclude='.github' \
+          --exclude='node_modules' \
           -e "ssh -o StrictHostKeyChecking=no" \
           . deploy@${{ secrets.HETZNER_SERVER_IP }}:~/app/
 
-    - name: Deploy application
+    - name: Initialize SSL certificates
       run: |
         ssh -o StrictHostKeyChecking=no deploy@${{ secrets.HETZNER_SERVER_IP }} << 'EOF'
         cd ~/app
+        
+        # Generate DH parameters if missing
+        if [ ! -f nginx/config/dhparam/dhparam.pem ]; then
+          mkdir -p nginx/config/dhparam
+          openssl dhparam -out nginx/config/dhparam/dhparam.pem 4096
+        fi
+        
+        # Stop existing containers
         docker compose -f docker-compose.prod.yml down
+        
+        # Start temporary nginx
+        docker compose -f docker-compose.prod.yml up -d nginx
+        
+        # Obtain certificates
+        docker compose -f docker-compose.prod.yml run --rm certbot \
+          certonly --webroot -w /var/www/certbot \
+          --email nina@tymyrddin.dev --agree-tos --non-interactive \
+          --force-renewal \
+          -d ${DOMAIN} -d www.${DOMAIN}
+        
+        # Full deployment
         docker compose -f docker-compose.prod.yml up -d --build
-        docker image prune -af
         EOF
+      env:
+        DOMAIN: ${{ secrets.PROD_DOMAIN }}
 
     # ======================
-    # VERIFICATION PHASE
+    # VERIFICATION
     # ======================
     - name: Verify deployment
       run: |
         ssh -o StrictHostKeyChecking=no deploy@${{ secrets.HETZNER_SERVER_IP }} << 'EOF'
-        echo "=== System Info ==="
-        docker --version
-        docker compose version
+        echo "=== System Verification ==="
         
-        echo "\n=== Running Containers ==="
-        docker ps -a --format "table {{.ID}}\t{{.Names}}\t{{.Status}}\t{{.Ports}}"
+        # Docker status
+        docker ps -a --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
         
-        echo "\n=== Health Checks ==="
-        echo "- Backend: $(curl -s http://localhost:8000/health)"
-        echo "- Frontend: $(curl -s http://localhost:8001/health)"
-        echo "- Nginx: $(curl -sk https://${{ secrets.PROD_DOMAIN }}/health)"
+        # SSL verification
+        echo "\n=== SSL Certificate ==="
+        docker exec nginx openssl x509 -noout -text -in /etc/letsencrypt/live/${DOMAIN}/cert.pem | \
+          grep -E 'Issuer:|Not Before:|Not After:|DNS:'
+        
+        # Connection test
+        echo "\n=== HTTPS Connection ==="
+        curl -Ikv https://${DOMAIN} 2>&1 | grep -E 'SSL|HTTP'
+        
+        # Security headers
+        echo "\n=== Security Headers ==="
+        curl -sI https://${DOMAIN} | grep -E 'Strict-Transport-Security|Content-Security-Policy|X-Content-Type-Options'
+        
+        # Nginx config test
+        echo "\n=== Nginx Configuration ==="
+        docker exec nginx nginx -t
         EOF
+      env:
+        DOMAIN: ${{ secrets.PROD_DOMAIN }}
