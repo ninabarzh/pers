@@ -15,6 +15,14 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
+    - name: Verify requirements hashes
+      run: |
+        cd backend
+        grep -q -- '--hash=' requirements.txt || (echo "Backend requirements.txt missing hashes" && exit 1)
+        cd ../frontend
+        grep -q -- '--hash=' requirements.txt || (echo "Frontend requirements.txt missing hashes" && exit 1)
+        cd ..
+
     - name: Install Docker Compose
       run: |
         curl -L "https://github.com/docker/compose/releases/download/v2.23.0/docker-compose-linux-$(uname -m)" -o /usr/local/bin/docker-compose
@@ -41,15 +49,9 @@ jobs:
         DOMAIN=${{ secrets.PROD_DOMAIN }}
         EOF
 
-    - name: Build backend image
-      working-directory: ./backend
+    - name: Build images
       run: |
-        docker build -f Dockerfile.prod -t backend-prod .
-
-    - name: Build frontend image
-      working-directory: ./frontend
-      run: |
-        docker build -f Dockerfile.prod -t frontend-prod .
+        docker-compose -f docker-compose.yml -f docker-compose.prod.yml build --no-cache
 
     - name: Setup SSH
       uses: webfactory/ssh-agent@v0.7.0
