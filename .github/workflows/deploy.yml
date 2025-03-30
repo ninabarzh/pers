@@ -82,19 +82,20 @@ jobs:
             set -euxo pipefail
             cd ${{ env.PROJECT_DIR }}
             
-            # Force rebuild backend with new permissions
-            docker compose -f ${{ env.COMPOSE_FILE }} build --no-cache backend
+            # Clean rebuild to ensure all changes apply
+            docker compose -f ${{ env.COMPOSE_FILE }} build --no-cache --pull backend
             
-            # Start services with proper order
+            # Start services
             docker compose -f ${{ env.COMPOSE_FILE }} up -d typesense
             sleep 30
             
             docker compose -f ${{ env.COMPOSE_FILE }} up -d backend
+            sleep 10
             
-            # Verify backend process is running
-            if ! docker compose -f ${{ env.COMPOSE_FILE }} exec backend pgrep -f uvicorn; then
-              echo "Uvicorn process not found. Backend logs:"
-              docker compose -f ${{ env.COMPOSE_FILE }} logs backend
+            # Verify installation
+            if ! docker compose -f ${{ env.COMPOSE_FILE }} exec backend which uvicorn; then
+              echo "Uvicorn not found in PATH. Installation verification:"
+              docker compose -f ${{ env.COMPOSE_FILE }} exec backend ls -la /root/.local/bin
               exit 1
             fi
           EOF

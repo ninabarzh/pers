@@ -26,13 +26,17 @@ RUN mkdir -p /app/static && chmod 755 /app/static
 # Ensure scripts in .local are usable
 ENV PATH=/root/.local/bin:$PATH
 
-# Create a non-root user
-RUN useradd -m myuser && \
-    chown -R myuser:myuser /app
+# Install uvicorn system-wide first
 RUN pip install --no-cache-dir uvicorn && \
-    chmod +x /usr/local/bin/uvicorn && \
+    # Then install your app requirements
+    pip install --no-cache-dir -r requirements.txt && \
+    # Create non-root user
     useradd -m myuser && \
-    chown -R myuser:myuser /app
+    # Set permissions
+    chown -R myuser:myuser /app && \
+    # Ensure uvicorn is in PATH
+    ln -s /root/.local/bin/uvicorn /usr/local/bin/uvicorn
+
 USER myuser
 
 # Expose the port
