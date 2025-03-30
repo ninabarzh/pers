@@ -22,7 +22,7 @@ RUN pip install --no-cache-dir --upgrade pip && \
 COPY src/ ./src/
 
 # Verify imports work in builder stage
-RUN python -c "from src.main import app; print('App imports successfully in builder')"
+RUN python -c "import sys; print(sys.path); from src.app.main import app; print('App imports successfully')"
 
 # Stage 2: Runtime
 FROM python:3.12-slim
@@ -49,8 +49,8 @@ ENV PATH="/opt/venv/bin:$PATH" \
     PYTHONPATH="/app" \
     STARTUP_DELAY=10
 
-# Verify imports work in runtime stage
-RUN /opt/venv/bin/python -c "import sys; print(sys.path); from src.main import app; print('App imports successfully in runtime')"
+# Verify runtime imports
+RUN /opt/venv/bin/python -c "from src.app.main import app; print('Runtime import successful')"
 
 USER myuser
 
@@ -58,4 +58,4 @@ EXPOSE 8000
 
 CMD ["sh", "-c", "echo \"Waiting ${STARTUP_DELAY}s for dependencies...\"; \
       sleep ${STARTUP_DELAY}; \
-      /opt/venv/bin/uvicorn src.main:app --host 0.0.0.0 --port 8000"]
+      /opt/venv/bin/uvicorn src.app.main:app --host 0.0.0.0 --port 8000"]
