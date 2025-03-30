@@ -24,14 +24,15 @@ else:
     logger.warning(f"No .env file found at {env_path}")
 
 config = {
-    "PORT": int(os.getenv('PROD_BACKEND_PORT', 8000)),
+    "PORT": int(os.getenv('BACKEND_PORT', 8000)),
     "DEBUG": os.getenv('DEBUG', 'false').lower() in ('true', '1', 't'),
     "TYPESENSE": {
-        "API_KEY": os.getenv('PROD_TYPESENSE_API_KEY'),
-        "HOST": os.getenv('PROD_TYPESENSE_HOST', 'typesense'),
-        "PORT": os.getenv('PROD_TYPESENSE_PORT', '8108')
+        "API_KEY": os.getenv('TYPESENSE_API_KEY'),
+        "HOST": os.getenv('TYPESENSE_HOST', 'typesense'),
+        "PORT": os.getenv('TYPESENSE_PORT', '8108'),
+        "PROTOCOL": os.getenv('TYPESENSE_PROTOCOL', 'http')
     },
-    "STATIC_DIR": str(Path(__file__).parent.parent / "static")  # Relative to src/app
+    "STATIC_DIR": str(Path(__file__).parent.parent / "static")
 }
 
 # Check production variables are set

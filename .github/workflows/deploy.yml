@@ -25,25 +25,19 @@ jobs:
         cat <<EOF > .env.prod
         ENV=production
         DEBUG=false
-        PROD_TYPESENSE_API_KEY=${{ secrets.PROD_TYPESENSE_API_KEY }}
-        PROD_TYPESENSE_HOST=${{ secrets.PROD_TYPESENSE_HOST }}
-        PROD_TYPESENSE_PORT=${{ secrets.PROD_TYPESENSE_PORT }}
-        PROD_TYPESENSE_PROTOCOL=${{ secrets.PROD_TYPESENSE_PROTOCOL }}
-        PROD_TYPESENSE_DATA_DIR=${{ secrets.PROD_TYPESENSE_DATA_DIR }}
-        PROD_BACKEND_PORT=${{ secrets.PROD_BACKEND_PORT }}
-        PROD_FRONTEND_PORT=${{ secrets.PROD_FRONTEND_PORT }}
+        TYPESENSE_API_KEY=${{ secrets.PROD_TYPESENSE_API_KEY }}
+        TYPESENSE_HOST=${{ secrets.PROD_TYPESENSE_HOST }}
+        TYPESENSE_PORT=${{ secrets.PROD_TYPESENSE_PORT }}
+        TYPESENSE_PROTOCOL=${{ secrets.PROD_TYPESENSE_PROTOCOL }}
+        TYPESENSE_DATA_DIR=${{ secrets.PROD_TYPESENSE_DATA_DIR }}
+        BACKEND_PORT=${{ secrets.PROD_BACKEND_PORT }}
+        FRONTEND_PORT=${{ secrets.PROD_FRONTEND_PORT }}
         DOMAIN=${{ secrets.PROD_DOMAIN }}
         EOF
 
     - name: Build images
       run: |
-        export TYPESENSE_API_KEY=${{ secrets.PROD_TYPESENSE_API_KEY }}
-        export TYPESENSE_HOST=${{ secrets.PROD_TYPESENSE_HOST }}
-        export TYPESENSE_PORT=${{ secrets.PROD_TYPESENSE_PORT }}
-        export BACKEND_PORT=${{ secrets.PROD_BACKEND_PORT }}
-        export FRONTEND_PORT=${{ secrets.PROD_FRONTEND_PORT }}
-        
-        docker-compose -f docker-compose.yml -f docker-compose.prod.yml build --no-cache
+        docker-compose -f docker-compose.prod.yml build
 
     - name: Setup SSH
       uses: webfactory/ssh-agent@v0.7.0
@@ -59,9 +53,8 @@ jobs:
         ssh -o StrictHostKeyChecking=no \
             ${{ secrets.HETZNER_USER }}@${{ secrets.HETZNER_SERVER_IP }} \
             "cd ~/app && \
-             docker-compose -f docker-compose.yml -f docker-compose.prod.yml down && \
-             docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build --force-recreate && \
-             docker system prune -af --volumes"
+             docker-compose -f docker-compose.prod.yml down && \
+             docker-compose -f docker-compose.prod.yml up -d"
 
     - name: Verify deployment
       run: |
