@@ -71,37 +71,44 @@ jobs:
 
     - name: Initialize certificates
       run: |
-        ssh -o StrictHostKeyChecking=no deploy@${{ secrets.HETZNER_SERVER_IP }} << 'EOF'
+        ssh -T -o StrictHostKeyChecking=no deploy@${{ secrets.HETZNER_SERVER_IP }} << 'EOT'
         cd ~/app
         
         # Create .env file for compose
-        cat <<EOL > .env
+        cat <<EOF > .env
         TYPESENSE_API_KEY=$TYPESENSE_API_KEY
         TYPESENSE_DATA_DIR=/data/typesense
         TYPESENSE_HOST=typesense
         TYPESENSE_PORT=8108
         TYPESENSE_PROTOCOL=http
         DOMAIN=$DOMAIN
-        EOL
+        EOF
         
-        # Generate DH params in background if missing
+        # Pre-generate DH params (2048-bit for speed)
         mkdir -p nginx/config/dhparam
         if [ ! -f nginx/config/dhparam/dhparam.pem ]; then
-          openssl dhparam -out nginx/config/dhparam/dhparam.pem 2048 & # Use 2048 for faster generation
+          openssl dhparam -out nginx/config/dhparam/dhparam.pem 2048
         fi
         
-        # Start only nginx for certbot
-        docker compose -f docker-compose.prod.yml up -d nginx
+        # Start services in correct order
+        docker compose -f docker-compose.prod.yml up -d typesense
+        sleep 10 # Wait for typesense to initialize
+        
+        docker compose -f docker-compose.prod.yml up -d backend
+        sleep 5 # Wait for backend
+        
+        docker compose -f docker-compose.prod.yml up -d frontend nginx
         
         # Get certificates
         docker compose -f docker-compose.prod.yml run --rm certbot \
-          certbot certonly --webroot -w /var/www/certbot \
+          certonly --webroot -w /var/www/certbot \
           --email nina@tymyrddin.dev --agree-tos --non-interactive \
+          --force-renewal \
           -d $DOMAIN -d www.$DOMAIN
         
-        # Full deployment
-        docker compose -f docker-compose.prod.yml up -d --build
-        EOF
+        # Final restart with certificates
+        docker compose -f docker-compose.prod.yml restart nginx
+        EOT
       env:
         TYPESENSE_API_KEY: ${{ secrets.PROD_TYPESENSE_API_KEY }}
         DOMAIN: ${{ secrets.PROD_DOMAIN }}
@@ -112,17 +119,21 @@ jobs:
     # ======================
     - name: Verify deployment
       run: |
-        ssh -o StrictHostKeyChecking=no deploy@${{ secrets.HETZNER_SERVER_IP }} << 'EOF'
+        ssh -T -o StrictHostKeyChecking=no deploy@${{ secrets.HETZNER_SERVER_IP }} << 'EOT'
         cd ~/app
         echo "=== Running Containers ==="
-        docker compose -f docker-compose.prod.yml ps
+        docker compose -f docker-compose.prod.yml ps -a
+        
+        echo "\n=== Typesense Logs ==="
+        docker compose -f docker-compose.prod.yml logs typesense
         
         echo "\n=== SSL Certificate ==="
         docker compose -f docker-compose.prod.yml exec nginx \
-          openssl x509 -noout -text -in /etc/letsencrypt/live/$DOMAIN/cert.pem | grep -E 'Issuer:|Not Before:|Not After:|DNS:'
+          openssl x509 -noout -text -in /etc/letsencrypt/live/$DOMAIN/cert.pem | \
+          grep -E 'Issuer:|Not Before:|Not After:|DNS:'
         
         echo "\n=== HTTPS Test ==="
         curl -I https://$DOMAIN
-        EOF
+        EOT
       env:
         DOMAIN: ${{ secrets.PROD_DOMAIN }}
