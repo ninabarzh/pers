@@ -13,55 +13,55 @@ jobs:
 
     steps:
     # ======================
-    # REPOSITORY SETUP
+    # SETUP PHASE
     # ======================
     - name: Checkout code
       uses: actions/checkout@v4
 
+    - name: Set up Docker
+      uses: docker/setup-buildx-action@v2
+
+    - name: Install Docker Compose
+      run: |
+        # Install Docker Compose v2
+        mkdir -p ~/.docker/cli-plugins/
+        curl -SL https://github.com/docker/compose/releases/download/v2.23.0/docker-compose-linux-x86_64 -o ~/.docker/cli-plugins/docker-compose
+        chmod +x ~/.docker/cli-plugins/docker-compose
+        docker compose version
+
     # ======================
-    # CONFIGURATION
+    # BUILD PHASE
     # ======================
     - name: Generate production .env
       run: |
         cat <<EOF > .env.prod
-        # Application
         ENV=production
         DEBUG=false
-        
-        # Typesense
         TYPESENSE_API_KEY=${{ secrets.PROD_TYPESENSE_API_KEY }}
         TYPESENSE_HOST=typesense
         TYPESENSE_PORT=8108
         TYPESENSE_PROTOCOL=http
         TYPESENSE_DATA_DIR=/data/typesense
-        
-        # Network
         BACKEND_PORT=8000
         FRONTEND_PORT=8001
         DOMAIN=${{ secrets.PROD_DOMAIN }}
         EOF
 
-    # ======================
-    # BUILD IMAGES
-    # ======================
     - name: Build production images
       env:
         TYPESENSE_API_KEY: ${{ secrets.PROD_TYPESENSE_API_KEY }}
       run: |
-        docker-compose -f docker-compose.prod.yml build
+        docker compose -f docker-compose.prod.yml build
 
     # ======================
-    # SSH SETUP
+    # DEPLOYMENT PHASE
     # ======================
     - name: Setup SSH
       uses: webfactory/ssh-agent@v0.7.0
       with:
         ssh-private-key: ${{ secrets.HETZNER_SSH_KEY }}
 
-    # ======================
-    # FILE TRANSFER
-    # ======================
-    - name: Sync files to server
+    - name: Transfer files to server
       run: |
         rsync -avz --delete \
           --exclude='.git' \
@@ -69,37 +69,30 @@ jobs:
           -e "ssh -o StrictHostKeyChecking=no" \
           . deploy@${{ secrets.HETZNER_SERVER_IP }}:~/app/
 
-    # ======================
-    # DEPLOYMENT
-    # ======================
     - name: Deploy application
       run: |
         ssh -o StrictHostKeyChecking=no deploy@${{ secrets.HETZNER_SERVER_IP }} << 'EOF'
         cd ~/app
-        
-        # Pull latest images and recreate containers
         docker compose -f docker-compose.prod.yml down
         docker compose -f docker-compose.prod.yml up -d --build
-        
-        # Cleanup old images
         docker image prune -af
         EOF
 
     # ======================
-    # VERIFICATION
+    # VERIFICATION PHASE
     # ======================
     - name: Verify deployment
       run: |
         ssh -o StrictHostKeyChecking=no deploy@${{ secrets.HETZNER_SERVER_IP }} << 'EOF'
-        echo "=== Deployment Verification ==="
-        echo "- Docker version: $(docker --version)"
-        echo "- Compose version: $(docker compose version)"
+        echo "=== System Info ==="
+        docker --version
+        docker compose version
         
-        echo "\n=== Running Services ==="
-        docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+        echo "\n=== Running Containers ==="
+        docker ps -a --format "table {{.ID}}\t{{.Names}}\t{{.Status}}\t{{.Ports}}"
         
         echo "\n=== Health Checks ==="
-        echo "Backend: $(curl -s http://localhost:8000/health)"
-        echo "Frontend: $(curl -s http://localhost:8001/health)"
-        echo "Nginx: $(curl -sk https://${{ secrets.PROD_DOMAIN }}/health)"
+        echo "- Backend: $(curl -s http://localhost:8000/health)"
+        echo "- Frontend: $(curl -s http://localhost:8001/health)"
+        echo "- Nginx: $(curl -sk https://${{ secrets.PROD_DOMAIN }}/health)"
         EOF
