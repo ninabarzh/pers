@@ -76,28 +76,31 @@ jobs:
           EOF
 
       # === DEPLOY SERVICES ===
-      - name: Start containers
-        run: |
-          ssh -i ~/.ssh/id_ed25519 deploy@${{ secrets.HETZNER_SERVER_IP }} <<'EOF'
-            set -euxo pipefail
-            cd ${{ env.PROJECT_DIR }}
-            
-            # Start services in order with proper waiting
-            docker compose -f ${{ env.COMPOSE_FILE }} up -d typesense
-            sleep 20  # Wait for Typesense to fully initialize
-            
-            docker compose -f ${{ env.COMPOSE_FILE }} up -d backend
-            sleep 30  # Wait for backend initialization
-            
-            # Verify backend is healthy before proceeding
-            if ! docker compose -f ${{ env.COMPOSE_FILE }} ps backend | grep -q "(healthy)"; then
-              echo "Backend failed to become healthy"
-              docker compose -f ${{ env.COMPOSE_FILE }} logs backend
-              exit 1
-            fi
-            
-            docker compose -f ${{ env.COMPOSE_FILE }} up -d --wait
-          EOF
+- name: Start containers
+  run: |
+    ssh -i ~/.ssh/id_ed25519 deploy@${{ secrets.HETZNER_SERVER_IP }} <<'EOF'
+      set -euxo pipefail
+      cd ${{ env.PROJECT_DIR }}
+      
+      # Start with build to ensure permissions are correct
+      docker compose -f ${{ env.COMPOSE_FILE }} build backend
+      
+      # Start services with longer waits
+      docker compose -f ${{ env.COMPOSE_FILE }} up -d typesense
+      sleep 30  # Increased from 20
+      
+      docker compose -f ${{ env.COMPOSE_FILE }} up -d backend
+      sleep 60  # Increased from 30
+      
+      # More detailed health check
+      if ! docker compose -f ${{ env.COMPOSE_FILE }} ps backend | grep -q "(healthy)"; then
+        echo "Backend logs:"
+        docker compose -f ${{ env.COMPOSE_FILE }} logs backend
+        echo "Trying direct healthcheck:"
+        curl -v http://localhost:${{ secrets.PROD_BACKEND_PORT }}/health || true
+        exit 1
+      fi
+    EOF
 
       # === VERIFICATION ===
       - name: Verify deployment
