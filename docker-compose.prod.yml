@@ -59,7 +59,10 @@ services:
       PYTHONPATH: ${PROD_FRONTEND_PYTHONPATH}
       FRONTEND_PORT: 8001
     volumes:
-      - static_volume:/var/www/static:ro
+      - type: volume
+        source: static_volume
+        target: /var/www/static
+        read_only: true
       # - ./frontend/src:/app/src:ro
     networks:
       - app-network
@@ -72,11 +75,21 @@ services:
       file: docker-compose.yml
       service: nginx
     volumes:
-      - ./nginx/nginx.prod.conf:/etc/nginx/nginx.conf
-      - ./nginx/snippets:/etc/nginx/snippets
-      - static_volume:/var/www/static
-      - certbot_www:/var/www/certbot
-      - certbot_conf:/etc/letsencrypt
+      - type: bind
+        source: ./nginx/nginx.prod.conf
+        target: /etc/nginx/nginx.conf
+      - type: bind
+        source: ./nginx/snippets
+        target: /etc/nginx/snippets
+      - type: volume
+        source: static_volume
+        target: /var/www/static
+      - type: volume
+        source: certbot_www
+        target: /var/www/certbot
+      - type: volume
+        source: certbot_conf
+        target: /etc/letsencrypt
     networks:
       app-network:
         aliases: [${DOMAIN}]
