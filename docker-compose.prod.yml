@@ -5,8 +5,8 @@ services:
       context: .
       dockerfile: backend/Dockerfile.typesense
     environment:
-      - TYPESENSE_API_KEY=${PROD_TYPESENSE_API_KEY}
-      - TYPESENSE_DATA_DIR=${PROD_TYPESENSE_DATA_DIR}
+      - TYPESENSE_API_KEY=${TYPESENSE_API_KEY}
+      - TYPESENSE_DATA_DIR=${TYPESENSE_DATA_DIR}
     deploy:
       resources:
         limits:
@@ -17,6 +17,8 @@ services:
       interval: 15s
       timeout: 5s
       retries: 5
+    networks:
+      - app-network
 
   backend:
     build:
@@ -26,10 +28,10 @@ services:
       - ENV=production
       - DEBUG=false
       - PYTHONPATH=/app/src
-      - TYPESENSE_API_KEY=${PROD_TYPESENSE_API_KEY}
-      - TYPESENSE_HOST=${PROD_TYPESENSE_HOST}
-      - TYPESENSE_PORT=${PROD_TYPESENSE_PORT}
-      - TYPESENSE_PROTOCOL=${PROD_TYPESENSE_PROTOCOL}
+      - TYPESENSE_API_KEY=${TYPESENSE_API_KEY}
+      - TYPESENSE_HOST=${TYPESENSE_HOST}
+      - TYPESENSE_PORT=${TYPESENSE_PORT}
+      - TYPESENSE_PROTOCOL=${TYPESENSE_PROTOCOL}
     deploy:
       resources:
         limits:
@@ -39,19 +41,30 @@ services:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
+      retries: 3
+    depends_on:
+      typesense:
+        condition: service_healthy
+    networks:
+      - app-network
 
   frontend:
     build:
-      context: .frontend
+      context: ./frontend  # Fixed path (was .frontend)
       dockerfile: Dockerfile.prod
     environment:
       - ENV=production
-      - BACKEND_URL=https://${PROD_DOMAIN}/api
+      - BACKEND_URL=https://${DOMAIN}/api  # Changed from PROD_DOMAIN to DOMAIN
     deploy:
       resources:
         limits:
           memory: 256M
           cpus: '0.3'
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - app-network
 
   nginx:
     image: nginx:1.25-alpine
@@ -67,14 +80,24 @@ services:
     depends_on:
       - backend
       - frontend
+      - certbot
+    networks:
+      - app-network
 
   certbot:
     image: certbot/certbot:latest
     volumes:
       - certbot_www:/var/www/certbot
       - certbot_conf:/etc/letsencrypt
-    command: renew --webroot -w /var/www/certbot --quiet
+    entrypoint: "/bin/sh -c"
+    command: |
+      "trap exit TERM; while :; do
+        certbot renew --webroot -w /var/www/certbot;
+        sleep 12h & wait $!;
+      done"
     restart: unless-stopped
+    networks:
+      - app-network
 
 volumes:
   static_volume:
@@ -86,6 +109,5 @@ volumes:
   certbot_conf:
 
 networks:
-  default:
+  app-network:
     driver: bridge
-    name: app-network

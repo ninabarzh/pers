@@ -20,9 +20,9 @@ jobs:
         curl -L "https://github.com/docker/compose/releases/download/v2.23.0/docker-compose-linux-$(uname -m)" -o /usr/local/bin/docker-compose
         chmod +x /usr/local/bin/docker-compose
 
-    - name: Generate production .env
+    - name: Create .env file
       run: |
-        cat <<EOF > .env.prod
+        cat <<EOF > .env
         ENV=production
         DEBUG=false
         TYPESENSE_API_KEY=${{ secrets.PROD_TYPESENSE_API_KEY }}
@@ -35,16 +35,14 @@ jobs:
         DOMAIN=${{ secrets.PROD_DOMAIN }}
         EOF
 
-    - name: Build images with secrets
+    - name: Build containers
+      env:
+        TYPESENSE_API_KEY: ${{ secrets.PROD_TYPESENSE_API_KEY }}
+        TYPESENSE_HOST: ${{ secrets.PROD_TYPESENSE_HOST }}
+        TYPESENSE_PORT: ${{ secrets.PROD_TYPESENSE_PORT }}
+        TYPESENSE_PROTOCOL: ${{ secrets.PROD_TYPESENSE_PROTOCOL }}
+        DOMAIN: ${{ secrets.PROD_DOMAIN }}
       run: |
-        # Export secrets as environment variables
-        export TYPESENSE_API_KEY=${{ secrets.PROD_TYPESENSE_API_KEY }}
-        export TYPESENSE_HOST=${{ secrets.PROD_TYPESENSE_HOST }}
-        export TYPESENSE_PORT=${{ secrets.PROD_TYPESENSE_PORT }}
-        export TYPESENSE_PROTOCOL=${{ secrets.PROD_TYPESENSE_PROTOCOL }}
-        export DOMAIN=${{ secrets.PROD_DOMAIN }}
-        
-        # Build with the production compose file
         docker-compose -f docker-compose.prod.yml build
 
     - name: Setup SSH
