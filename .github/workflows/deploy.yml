@@ -17,7 +17,7 @@ jobs:
 
     - name: Prepare for build
       run: |
-        # Create backup of original requirements files
+        # Backup of original requirements files
         cp backend/requirements.txt backend/requirements.original.txt
         cp frontend/requirements.txt frontend/requirements.original.txt
         
