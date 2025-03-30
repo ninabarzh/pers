@@ -1,12 +1,15 @@
-# frontend/dockerfile.prod
 # Stage 1: Builder
 FROM python:3.12-slim as builder
 
 WORKDIR /app
 
-# Install system dependencies first
+# Install system dependencies including brotli and gzip
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends brotli gzip && \
+    apt-get install -y --no-install-recommends \
+    brotli \
+    gzip \
+    gcc \
+    python3-dev && \
     rm -rf /var/lib/apt/lists/*
 
 # Create virtual environment
@@ -30,7 +33,7 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-# Install runtime dependencies
+# Install runtime dependencies (brotli for serving pre-compressed files)
 RUN apt-get update && \
     apt-get install -y --no-install-recommends brotli && \
     rm -rf /var/lib/apt/lists/*
