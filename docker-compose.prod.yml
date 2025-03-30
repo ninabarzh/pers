@@ -11,7 +11,9 @@ services:
       app-network:
         aliases: [typesense]
     volumes:
-      - "typesense_data:/data"
+    - type: volume
+      source: typesense_data
+      target: /data
     deploy:
       resources:
         limits:
@@ -33,7 +35,10 @@ services:
       BACKEND_PORT: ${PROD_BACKEND_PORT:-8000}
       TYPESENSE_PROTOCOL: http
     volumes:
-      - static_volume:/app/static:rw
+      - type: volume
+        source: static_volume
+        target: /app/static
+        read_only: false
       # - ./backend/src:/app/src:ro
     networks:
       - app-network
@@ -92,12 +97,16 @@ services:
 volumes:
   typesense_data:
     driver: local
+    name: typesense_data
   static_volume:
     driver: local
+    name: static_volume
   certbot_www:
     driver: local
+    name: certbot_www
   certbot_conf:
     driver: local
+    name: certbot_conf
 
 networks:
   app-network:

@@ -76,28 +76,33 @@ jobs:
             set -euxo pipefail
             cd ${{ env.PROJECT_DIR }} || exit 1
             
-            # Export all required variables
+            # Create necessary directories
+            mkdir -p data/{typesense,certbot/{conf,www}} nginx/snippets
+            chmod -R 755 data
+            
+            # Export variables
+            export PROD_TYPESENSE_DATA_DIR=/data
             export PROD_TYPESENSE_PORT=${{ secrets.PROD_TYPESENSE_PORT }}
             export PROD_BACKEND_PORT=${{ secrets.PROD_BACKEND_PORT }}
             export PROD_TYPESENSE_API_KEY=${{ secrets.PROD_TYPESENSE_API_KEY }}
-            export TYPESENSE_PORT=${{ secrets.PROD_TYPESENSE_PORT }}  # For backward compatibility
-            export BACKEND_PORT=${{ secrets.PROD_BACKEND_PORT }}      # For backward compatibility
             
-            # Validate config first
-            docker compose -f ${{ env.COMPOSE_FILE }} config || {
-              echo "Configuration validation failed"
+            # Validate configuration
+            if ! docker compose -f ${{ env.COMPOSE_FILE }} config; then
+              echo "Configuration validation failed - showing full config for debugging:"
+              docker compose -f ${{ env.COMPOSE_FILE }} config
               exit 1
-            }
+            fi
             
-            # Rest of deployment
+            # Run deployment
             docker compose -f ${{ env.COMPOSE_FILE }} down --remove-orphans || true
             docker compose -f ${{ env.COMPOSE_FILE }} build --no-cache --pull
             docker compose -f ${{ env.COMPOSE_FILE }} up -d --wait
             
-            if ! docker network ls | grep -q app-network; then
+            # Ensure network exists
+            docker network inspect app-network >/dev/null 2>&1 || \
               docker network create app-network
-            fi
             
+            # Certbot renewal check
             [ -d "data/certbot/conf/live" ] && \
               docker compose -f ${{ env.COMPOSE_FILE }} run --rm certbot renew --dry-run
           EOF
