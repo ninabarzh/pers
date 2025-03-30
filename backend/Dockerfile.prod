@@ -1,3 +1,4 @@
+# backend/Dockerfile.prod
 # Stage 1: Builder
 FROM python:3.12-slim as builder
 
@@ -15,10 +16,10 @@ ENV PATH="/opt/venv/bin:$PATH"
 
 # Install Python dependencies with hash checking
 COPY requirements.txt .
-RUN pip install --no-cache-dir --require-hashes -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
-COPY src/ ./src/
+COPY . .
 
 # Security checks
 RUN find . -name '*.py' -exec chmod 644 {} \; && \
@@ -55,10 +56,18 @@ ENV PATH="/opt/venv/bin:$PATH" \
 
 USER myuser
 
-HEALTHCHECK --interval=30s --timeout=10s \
+HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
     CMD curl -f http://localhost:8000/health || exit 1
+
+RUN python -c "import os; \
+    assert os.getenv('PROD_TYPESENSE_API_KEY'), 'Missing TYPESENSE_API_KEY'; \
+    assert os.getenv('PROD_TYPESENSE_HOST'), 'Missing TYPESENSE_HOST'; \
+    print('Environment validation passed')"
 
 CMD ["sh", "-c", \
     "echo \"Waiting ${STARTUP_DELAY}s for dependencies...\"; \
     sleep ${STARTUP_DELAY}; \
+    python -c \"from src.app.main import config; \
+    assert config['TYPESENSE']['API_KEY'], 'Typesense API key not configured'; \
+    print('Starting with config:', config)\" && \
     uvicorn src.app.main:app --host 0.0.0.0 --port 8000 --no-access-log"]

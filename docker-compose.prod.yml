@@ -20,16 +20,16 @@ services:
 
   backend:
     build:
-      context: .
-      dockerfile: backend/Dockerfile.prod
+      context: ./backend
+      dockerfile: Dockerfile.prod
     environment:
       - ENV=production
       - DEBUG=false
       - PYTHONPATH=/app/src
-      - PROD_TYPESENSE_API_KEY=${PROD_TYPESENSE_API_KEY}
-      - PROD_TYPESENSE_HOST=${PROD_TYPESENSE_HOST}
-      - PROD_TYPESENSE_PORT=${PROD_TYPESENSE_PORT}
-      - PROD_TYPESENSE_PROTOCOL=${PROD_TYPESENSE_PROTOCOL}
+      - TYPESENSE_API_KEY=${PROD_TYPESENSE_API_KEY}
+      - TYPESENSE_HOST=${PROD_TYPESENSE_HOST}
+      - TYPESENSE_PORT=${PROD_TYPESENSE_PORT}
+      - TYPESENSE_PROTOCOL=${PROD_TYPESENSE_PROTOCOL}
     deploy:
       resources:
         limits:
@@ -42,8 +42,8 @@ services:
 
   frontend:
     build:
-      context: .
-      dockerfile: frontend/Dockerfile.prod
+      context: .frontend
+      dockerfile: Dockerfile.prod
     environment:
       - ENV=production
       - BACKEND_URL=https://${PROD_DOMAIN}/api

@@ -51,6 +51,14 @@ jobs:
 
     - name: Build images
       run: |
+        # Load environment variables for build
+        export TYPESENSE_API_KEY=${{ secrets.PROD_TYPESENSE_API_KEY }}
+        export TYPESENSE_HOST=${{ secrets.PROD_TYPESENSE_HOST }}
+        export TYPESENSE_PORT=${{ secrets.PROD_TYPESENSE_PORT }}
+        export BACKEND_PORT=${{ secrets.PROD_BACKEND_PORT }}
+        export FRONTEND_PORT=${{ secrets.PROD_FRONTEND_PORT }}
+        
+        # Build with explicit contexts
         docker-compose -f docker-compose.yml -f docker-compose.prod.yml build --no-cache
 
     - name: Setup SSH

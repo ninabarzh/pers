@@ -34,6 +34,13 @@ config = {
     "STATIC_DIR": str(Path(__file__).parent.parent / "static")  # Relative to src/app
 }
 
+# Check production variables are set
+if os.getenv('ENV') == 'production':
+    required_vars = ['PROD_TYPESENSE_API_KEY', 'PROD_TYPESENSE_HOST']  # Add others as needed
+    missing = [var for var in required_vars if not os.getenv(var)]
+    if missing:
+        raise ValueError(f"Missing required production environment variables: {missing}")
+
 # Create static directory if it doesn't exist
 static_dir = Path(config["STATIC_DIR"])
 try:

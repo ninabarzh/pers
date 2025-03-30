@@ -1,3 +1,4 @@
+# frontend/Dockerfile.prod
 # Stage 1: Builder
 FROM python:3.12-slim as builder
 
@@ -15,10 +16,10 @@ ENV PATH="/opt/venv/bin:$PATH"
 
 # Install Python dependencies
 COPY requirements.txt .
-RUN pip install --no-cache-dir --require-hashes -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy and process static files
-COPY src/ ./src/
+COPY . .
 RUN find src/app/static/ -type f \( -name "*.css" -o -name "*.js" \) \
     -exec gzip -9 -k {} \; \
     -exec brotli -9 -k {} \;
@@ -60,4 +61,7 @@ USER myuser
 HEALTHCHECK --interval=30s --timeout=10s \
     CMD curl -f http://localhost:8001/health || exit 1
 
-CMD ["uvicorn", "src.app.main:app", "--host", "0.0.0.0", "--port", "8001", "--no-access-log"]
+CMD ["sh", "-c", \
+    "python -c \"import os; assert os.getenv('ENV') == 'production', 'Production environment required'; \
+    from src.app.main import config; print('Configuration loaded:', config)\" && \
+    uvicorn src.app.main:app --host 0.0.0.0 --port 8001 --no-access-log"]
