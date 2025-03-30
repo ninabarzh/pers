@@ -74,6 +74,7 @@ services:
     volumes:
       - ./nginx/nginx.prod.conf:/etc/nginx/nginx.conf
       - ./nginx/snippets:/etc/nginx/snippets
+      - ./nginx/config/dhparam:/etc/nginx/dhparam:ro
       - static_volume:/var/www/static
       - certbot_www:/var/www/certbot
       - certbot_conf:/etc/letsencrypt
@@ -103,6 +104,7 @@ services:
       - app-network
 
 volumes:
+  typesense_data:
   static_volume:
     driver_opts:
       type: none

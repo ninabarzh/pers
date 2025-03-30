@@ -49,9 +49,24 @@ jobs:
     - name: Build production images
       env:
         TYPESENSE_API_KEY: ${{ secrets.PROD_TYPESENSE_API_KEY }}
+        TYPESENSE_DATA_DIR: /data/typesense
+        TYPESENSE_HOST: typesense
+        TYPESENSE_PORT: 8108
+        TYPESENSE_PROTOCOL: http
         DOMAIN: ${{ secrets.PROD_DOMAIN }}
       run: |
-        docker compose -f docker-compose.prod.yml build
+        # Create temporary .env file for build
+        cat <<EOF > .env.tmp
+        TYPESENSE_API_KEY=$TYPESENSE_API_KEY
+        TYPESENSE_DATA_DIR=$TYPESENSE_DATA_DIR
+        TYPESENSE_HOST=$TYPESENSE_HOST
+        TYPESENSE_PORT=$TYPESENSE_PORT
+        TYPESENSE_PROTOCOL=$TYPESENSE_PROTOCOL
+        DOMAIN=$DOMAIN
+        EOF
+        
+        docker compose -f docker-compose.prod.yml --env-file .env.tmp build
+        rm .env.tmp
 
     # ======================
     # DEPLOYMENT PHASE
