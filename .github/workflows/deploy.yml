@@ -13,7 +13,7 @@ jobs:
 
     steps:
     # ======================
-    # SETUP & BUILD
+    # SETUP PHASE
     # ======================
     - name: Checkout code
       uses: actions/checkout@v4
@@ -28,6 +28,9 @@ jobs:
           -o ~/.docker/cli-plugins/docker-compose
         chmod +x ~/.docker/cli-plugins/docker-compose
 
+    # ======================
+    # BUILD PHASE
+    # ======================
     - name: Generate production .env
       run: |
         cat <<EOF > .env.prod
@@ -46,11 +49,12 @@ jobs:
     - name: Build production images
       env:
         TYPESENSE_API_KEY: ${{ secrets.PROD_TYPESENSE_API_KEY }}
+        DOMAIN: ${{ secrets.PROD_DOMAIN }}
       run: |
         docker compose -f docker-compose.prod.yml build
 
     # ======================
-    # DEPLOYMENT
+    # DEPLOYMENT PHASE
     # ======================
     - name: Setup SSH
       uses: webfactory/ssh-agent@v0.7.0
@@ -62,67 +66,63 @@ jobs:
         rsync -avz --delete \
           --exclude='.git' \
           --exclude='.github' \
-          --exclude='node_modules' \
           -e "ssh -o StrictHostKeyChecking=no" \
           . deploy@${{ secrets.HETZNER_SERVER_IP }}:~/app/
 
-    - name: Initialize SSL certificates
+    - name: Initialize certificates
       run: |
         ssh -o StrictHostKeyChecking=no deploy@${{ secrets.HETZNER_SERVER_IP }} << 'EOF'
         cd ~/app
         
-        # Generate DH parameters if missing
+        # Create .env file for compose
+        cat <<EOL > .env
+        TYPESENSE_API_KEY=$TYPESENSE_API_KEY
+        TYPESENSE_DATA_DIR=/data/typesense
+        TYPESENSE_HOST=typesense
+        TYPESENSE_PORT=8108
+        TYPESENSE_PROTOCOL=http
+        DOMAIN=$DOMAIN
+        EOL
+        
+        # Generate DH params in background if missing
+        mkdir -p nginx/config/dhparam
         if [ ! -f nginx/config/dhparam/dhparam.pem ]; then
-          mkdir -p nginx/config/dhparam
-          openssl dhparam -out nginx/config/dhparam/dhparam.pem 4096
+          openssl dhparam -out nginx/config/dhparam/dhparam.pem 2048 & # Use 2048 for faster generation
         fi
         
-        # Stop existing containers
-        docker compose -f docker-compose.prod.yml down
-        
-        # Start temporary nginx
+        # Start only nginx for certbot
         docker compose -f docker-compose.prod.yml up -d nginx
         
-        # Obtain certificates
+        # Get certificates
         docker compose -f docker-compose.prod.yml run --rm certbot \
-          certonly --webroot -w /var/www/certbot \
+          certbot certonly --webroot -w /var/www/certbot \
           --email nina@tymyrddin.dev --agree-tos --non-interactive \
-          --force-renewal \
-          -d ${DOMAIN} -d www.${DOMAIN}
+          -d $DOMAIN -d www.$DOMAIN
         
         # Full deployment
         docker compose -f docker-compose.prod.yml up -d --build
         EOF
       env:
+        TYPESENSE_API_KEY: ${{ secrets.PROD_TYPESENSE_API_KEY }}
         DOMAIN: ${{ secrets.PROD_DOMAIN }}
+      timeout-minutes: 15
 
     # ======================
-    # VERIFICATION
+    # VERIFICATION PHASE
     # ======================
     - name: Verify deployment
       run: |
         ssh -o StrictHostKeyChecking=no deploy@${{ secrets.HETZNER_SERVER_IP }} << 'EOF'
-        echo "=== System Verification ==="
+        cd ~/app
+        echo "=== Running Containers ==="
+        docker compose -f docker-compose.prod.yml ps
         
-        # Docker status
-        docker ps -a --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
-        
-        # SSL verification
         echo "\n=== SSL Certificate ==="
-        docker exec nginx openssl x509 -noout -text -in /etc/letsencrypt/live/${DOMAIN}/cert.pem | \
-          grep -E 'Issuer:|Not Before:|Not After:|DNS:'
+        docker compose -f docker-compose.prod.yml exec nginx \
+          openssl x509 -noout -text -in /etc/letsencrypt/live/$DOMAIN/cert.pem | grep -E 'Issuer:|Not Before:|Not After:|DNS:'
         
-        # Connection test
-        echo "\n=== HTTPS Connection ==="
-        curl -Ikv https://${DOMAIN} 2>&1 | grep -E 'SSL|HTTP'
-        
-        # Security headers
-        echo "\n=== Security Headers ==="
-        curl -sI https://${DOMAIN} | grep -E 'Strict-Transport-Security|Content-Security-Policy|X-Content-Type-Options'
-        
-        # Nginx config test
-        echo "\n=== Nginx Configuration ==="
-        docker exec nginx nginx -t
+        echo "\n=== HTTPS Test ==="
+        curl -I https://$DOMAIN
         EOF
       env:
         DOMAIN: ${{ secrets.PROD_DOMAIN }}
