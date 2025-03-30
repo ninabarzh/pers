@@ -76,28 +76,31 @@ jobs:
           EOF
 
       # === DEPLOY SERVICES ===
-      - name: Start containers
+      - name: Verify requirements.txt exists
+        run: |
+          if [ ! -f "backend/requirements.txt" ]; then
+            echo "Error: backend/requirements.txt is missing" >&2
+            exit 1
+          fi
+          cat backend/requirements.txt
+
+      - name: Build and start containers
         run: |
           ssh -i ~/.ssh/id_ed25519 deploy@${{ secrets.HETZNER_SERVER_IP }} <<'EOF'
             set -euxo pipefail
             cd ${{ env.PROJECT_DIR }}
             
-            # Clean rebuild to ensure all changes apply
-            docker compose -f ${{ env.COMPOSE_FILE }} build --no-cache --pull backend
+            # Verify files exist
+            ls -la backend/requirements.txt
+            
+            # Build with cache
+            docker compose -f ${{ env.COMPOSE_FILE }} build backend
             
             # Start services
-            docker compose -f ${{ env.COMPOSE_FILE }} up -d typesense
-            sleep 30
+            docker compose -f ${{ env.COMPOSE_FILE }} up -d --wait
             
-            docker compose -f ${{ env.COMPOSE_FILE }} up -d backend
-            sleep 10
-            
-            # Verify installation
-            if ! docker compose -f ${{ env.COMPOSE_FILE }} exec backend which uvicorn; then
-              echo "Uvicorn not found in PATH. Installation verification:"
-              docker compose -f ${{ env.COMPOSE_FILE }} exec backend ls -la /root/.local/bin
-              exit 1
-            fi
+            # Verify running
+            docker compose -f ${{ env.COMPOSE_FILE }} ps
           EOF
 
       # === VERIFICATION ===
