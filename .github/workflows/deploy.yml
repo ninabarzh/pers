@@ -4,18 +4,12 @@ name: Deploy to Hetzner
 on:
   push:
     branches:
-      - main  # Triggers on pushes to main branch
-
-env:
-  COMPOSE_FILE: "docker-compose.yml:docker-compose.prod.yml"
+      - main
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     environment: production
-    permissions:
-      contents: read
-      deployments: write
 
     steps:
     - name: Checkout code
@@ -29,18 +23,13 @@ jobs:
     - name: Generate production .env
       run: |
         cat <<EOF > .env.prod
-        # Production Environment
         ENV=production
         DEBUG=false
-
-        # Typesense Configuration
         PROD_TYPESENSE_API_KEY=${{ secrets.PROD_TYPESENSE_API_KEY }}
         PROD_TYPESENSE_HOST=${{ secrets.PROD_TYPESENSE_HOST }}
         PROD_TYPESENSE_PORT=${{ secrets.PROD_TYPESENSE_PORT }}
         PROD_TYPESENSE_PROTOCOL=${{ secrets.PROD_TYPESENSE_PROTOCOL }}
         PROD_TYPESENSE_DATA_DIR=${{ secrets.PROD_TYPESENSE_DATA_DIR }}
-
-        # Application Configuration
         PROD_BACKEND_PORT=${{ secrets.PROD_BACKEND_PORT }}
         PROD_FRONTEND_PORT=${{ secrets.PROD_FRONTEND_PORT }}
         DOMAIN=${{ secrets.PROD_DOMAIN }}
@@ -48,7 +37,7 @@ jobs:
 
     - name: Build production images
       run: |
-        docker-compose -f $COMPOSE_FILE build --no-cache
+        docker-compose -f docker-compose.yml -f docker-compose.prod.yml build --no-cache
 
     - name: Setup SSH
       uses: webfactory/ssh-agent@v0.7.0
@@ -70,8 +59,8 @@ jobs:
         ssh -o StrictHostKeyChecking=no \
             ${{ secrets.HETZNER_USER }}@${{ secrets.HETZNER_SERVER_IP }} \
             "cd ~/app && \
-             docker-compose -f $COMPOSE_FILE down && \
-             docker-compose -f $COMPOSE_FILE up -d --build --force-recreate && \
+             docker-compose -f docker-compose.yml -f docker-compose.prod.yml down && \
+             docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build --force-recreate && \
              docker system prune -af --volumes"
 
     - name: Verify deployment
