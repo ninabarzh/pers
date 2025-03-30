@@ -1,4 +1,4 @@
-# backend/dockerfile.prod
+# backend/Dockerfile.prod
 # Stage 1: Builder
 FROM python:3.12-slim as builder
 
@@ -11,7 +11,14 @@ RUN apt-get update && \
 
 # Create virtual environment
 RUN python -m venv /opt/venv
-ENV PATH="/opt/venv/bin:$PATH"
+
+# Environment configuration
+ENV PATH="/opt/venv/bin:$PATH" \
+    PYTHONPATH="/app/src:/app" \  # Both paths for flexibility
+    STARTUP_DELAY=10
+
+# Verify runtime imports
+RUN /opt/venv/bin/python -c "from app.main import app; print('Runtime import successful')"
 
 # Install Python dependencies
 COPY requirements.txt .

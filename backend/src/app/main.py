@@ -1,23 +1,17 @@
 # backend/src/app/main.py
 import os
-import sys
-from pathlib import Path
 from dotenv import load_dotenv
 from starlette.applications import Starlette
 from starlette.routing import Route, Mount
 from starlette.responses import JSONResponse
 from starlette.staticfiles import StaticFiles
 
-# Add project root to Python path
-PROJECT_ROOT = Path(__file__).parent.parent.parent.parent  # points to pers/
-sys.path.insert(0, str(PROJECT_ROOT))
+# Relative imports (recommended)
+from .routes.search import search
+from .routes.upload import upload
 
-# Absolute imports
-from backend.src.app.routes.search import search
-from backend.src.app.routes.upload import upload
-
-# Environment setup
-load_dotenv(PROJECT_ROOT / '.env')
+# Environment setup - use absolute path in container
+load_dotenv('/app/.env')  # Updated path for Docker
 
 config = {
     "PORT": int(os.getenv('PROD_BACKEND_PORT', 8000)),
@@ -27,7 +21,7 @@ config = {
         "HOST": os.getenv('PROD_TYPESENSE_HOST', 'typesense'),
         "PORT": os.getenv('PROD_TYPESENSE_PORT', '8108')
     },
-    "STATIC_DIR": "/app/static"  # This matches your volume mount
+    "STATIC_DIR": "/app/static"
 }
 
 
@@ -64,7 +58,7 @@ app = Starlette(
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(
-        "backend.src.app.main:app",
+        "app.main:app",  # Updated import path
         host="0.0.0.0",
         port=config["PORT"],
         reload=config["DEBUG"]
