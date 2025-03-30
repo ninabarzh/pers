@@ -1,95 +1,182 @@
-# pers (under construction)
+# Pers - Green Finder or Greener Find Search Engine
 
-A project with [Typesense](https://typesense.org/) (No PhD required) in the backend, 
-[Starlette](https://www.starlette.io/) with [Jinja2 templates](https://jinja.palletsprojects.com/en/stable/) as the 
-frontend, and [Docker](https://www.docker.com/) for containerization, to be deployed to 
+Pers is a self-hosted search engine combining [Typesense](https://typesense.org/) (No PhD required) in the backend, 
+[Starlette](https://www.starlette.io/) with [Jinja2 templates](https://jinja.palletsprojects.com/en/stable/) in the 
+frontend, and [Docker](https://www.docker.com/) for containerization, deployed to 
 [Hetzner](https://www.hetzner.com/).
 
 A project started at the 
 [RIPE NCC Green Tech Hackathon](https://labs.ripe.net/author/becha/celebrating-green-tech-hackathon-results/), and 
 the first index is made from OSSFinder scraped data, also see [oss4climate](https://github.com/Pierre-VF/oss4climate).
 
+## Current features
+
+- Full-text search with typo tolerance
+- File upload & indexing (JSON)
+- Fast API backend with Starlette
+- Secure HTTPS with automatic Let's Encrypt
+
+## Prerequisites
+
+- Docker 20.10+
+- Docker Compose 2.0+
+- Python 3.10+ (for development)
+- Node.js 16+ (for frontend development)
+
 ## Development
 
-### Services
+### Setup
 
-Start all services:
+Clone the repository:
 
-```commandline
-docker-compose -f docker-compose.dev.yml up --build
+```
+git clone https://github.com/ninabarzh/pers.git
+cd pers
 ```
 
-Stop the current containers: 
+Set up environment:
 
-```commandline
-docker-compose -f docker-compose.dev.yml down
+```
+cp .env.example .env
 ```
 
-Rebuild: 
+Edit `.env` with your local values
 
-```commandline
-docker-compose -f docker-compose.dev.yml build
+Start services:
+
+```
+docker-compose -f docker-compose.yml up -d
 ```
 
-Start: 
-
-```commandline
-docker-compose -f docker-compose.dev.yml up
-```
-
-Run tests:
-
-```commandline
-docker-compose -f docker-compose.dev.yml --profile test up backend-tests frontend-tests
-```
-
-### Accessing services
+Access services:
 
 * Frontend: http://localhost:8001
-* Backend: http://localhost:8000
-* Nginx: http://localhost:8080
+* Backend API: http://localhost:8000
+* Typesense: http://localhost:8108
 
-### Verifying
+### Development commands
 
-Verify Typesense is working from within the backend container:
+Run backend tests:
 
-```commandline
-docker exec -it backend-app-dev curl http://typesense:8108/health
+```
+cd backend && ./run_tests.sh
 ```
 
-(Should return `{"ok":true})`
+Run frontend tests:
 
-Checks from the host machine:
-
-```commandline
-curl http://localhost:8108/health
+```
+cd frontend && ./run_tests.sh
 ```
 
-Should also return `{"ok":true}` if ports are mapped correctly)
+Rebuild containers:
 
-Check backend health:
-
-```commandline
-curl http://localhost:8000/health
+```
+docker-compose -f docker-compose.yml build --no-cache
 ```
 
-Should return `{"status":"healthy"}`
+View logs:
 
-Check frontend:
-
-```commandline
-curl -I http://localhost:8001
+```
+docker-compose logs -f
 ```
 
-Should return `200 OK`
+## Production deployment
 
-### Run the tests
+### Server preparation
 
-```commandline
-docker-compose -f docker-compose.dev.yml --profile test up backend-tests frontend-tests
+- Ubuntu 22.04 LTS
+- 2+ CPU cores
+- 4GB+ RAM
+- Domain name pointing to server
+
+### Deployment steps
+
+On your local machine:
+
+```
+git clone https://github.com/yourusername/pers.git
+cd pers
 ```
 
-### Roadmap
+Set up deployment secrets:
+
+```
+echo "PROD_DOMAIN=yourdomain.com" >> .env.prod
+echo "PROD_TYPESENSE_API_KEY=$(openssl rand -hex 32)" >> .env.prod
+```
+
+Deploy to production:
+
+```
+./deploy.sh
+```
+
+3. Certificate Setup (First Time)
+
+```
+ssh deploy@your-server
+cd ~/app
+chmod +x init-letsencrypt.sh
+./init-letsencrypt.sh
+```
+
+### Production URLs
+
+- Web Interface: https://yourdomain.com
+- API: https://yourdomain.com/api
+- Admin: https://yourdomain.com/admin
+
+### File Structure
+
+```
+pers/
+├── backend/          # Python search backend
+├── frontend/         # Web interface
+├── nginx/            # Production web server config
+├── data/             # Persistent data
+├── docker-compose.yml       # Development setup
+├── docker-compose.prod.yml  # Production setup
+└── init-letsencrypt.sh      # SSL certificate setup
+```
+
+### Maintenance
+
+Create backup of Typesense data:
+
+```
+docker exec -it typesense-db tar czvf /data/typesense-backup.tar.gz /data/typesense
+```
+
+### Monitoring
+
+View running containers:
+
+```
+docker compose -f docker-compose.prod.yml ps
+```
+
+Check logs:
+
+```
+docker compose -f docker-compose.prod.yml logs -f
+```
+
+### Troubleshooting
+
+- Issue: Typesense fails to start
+- Fix: Check memory allocation - Typesense needs at least 2GB free memory
+
+- Issue: Certificate generation fails
+- Fix: Verify port 80 is open and domain DNS is properly configured
+
+- Issue: File uploads failing
+- Fix: Check client_max_body_size in nginx config
+
+### License
+
+This is free and unencumbered software released into the public domain.
+
+## Roadmap
 
 #### Getting started
 - [x] Typesense, backend and frontend dockers.
@@ -125,32 +212,3 @@ docker-compose -f docker-compose.dev.yml --profile test up backend-tests fronten
 - [ ] Add user authentication to restrict access to the upload page.
 - [ ] Create a new index page with user authentication.
 - [ ] When uploading a `.json` file as index, be able to choose which index to upload to.
-
-## Production
-
-### Generate hashes for requirements
-
-```commandline
-pip install hashin
-```
-
-For backend:
-
-```commandline
-cd backend
-hashin -r requirements.txt $(cat requirements.txt | cut -d'=' -f1 | cut -d'>' -f1 | cut -d'<' -f1)
-```
-
-For frontend:
-
-```commandline
-cd frontend
-hashin -r requirements.txt $(cat requirements.txt | cut -d'=' -f1 | cut -d'>' -f1 | cut -d'<' -f1)
-```
-
-To deploy:
-
-```commandline
-docker-compose -f docker-compose.yml -f docker-compose.prod.yml build --no-cache
-docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
-```
