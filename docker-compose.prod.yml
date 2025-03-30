@@ -7,6 +7,8 @@ services:
     environment:
       - TYPESENSE_API_KEY=${PROD_TYPESENSE_API_KEY}
       - TYPESENSE_DATA_DIR=${PROD_TYPESENSE_DATA_DIR}
+    networks:
+      - app-network
 
   backend:
     extends:
@@ -18,13 +20,15 @@ services:
     environment:
       - PYTHONPATH=${PROD_BACKEND_PYTHONPATH}
       - TYPESENSE_HOST=typesense
-      - TYPESENSE_PORT=8108
+      - TYPESENSE_PORT=${TYPESENSE_PORT:-8108}
       - TYPESENSE_API_KEY=${PROD_TYPESENSE_API_KEY}
-      - BACKEND_PORT=8000
+      - BACKEND_PORT=${BACKEND_PORT:-8000}
       - TYPESENSE_PROTOCOL=http
     volumes:
       # read-write for if backend needs to write files
       - static_volume:/app/static:rw
+    networks:
+      - app-network
 
   frontend:
     extends:
@@ -38,6 +42,8 @@ services:
       - FRONTEND_PORT=8001
     volumes:
       - static_volume:/var/www/static:ro
+    networks:
+      - app-network
 
   nginx:
     extends:
@@ -49,14 +55,22 @@ services:
       - static_volume:/var/www/static
       - certbot_www:/var/www/certbot
       - certbot_conf:/etc/letsencrypt
+    networks:
+      - app-network
 
   certbot:
     extends:
       file: docker-compose.yml
       service: certbot
+    networks:
+      - app-network
 
 volumes:
   typesense_data:
   static_volume:
   certbot_www:
   certbot_conf:
+
+networks:
+  app-network:
+    driver: bridge
