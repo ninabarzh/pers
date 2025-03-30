@@ -74,45 +74,58 @@ jobs:
         ssh -T -o StrictHostKeyChecking=no deploy@${{ secrets.HETZNER_SERVER_IP }} << 'EOT'
         cd ~/app
         
-        # Create .env file for compose
+        # 1. Create .env file with all required variables
         cat <<EOF > .env
-        TYPESENSE_API_KEY=$TYPESENSE_API_KEY
+        TYPESENSE_API_KEY=${TYPESENSE_API_KEY}
         TYPESENSE_DATA_DIR=/data/typesense
         TYPESENSE_HOST=typesense
         TYPESENSE_PORT=8108
         TYPESENSE_PROTOCOL=http
-        DOMAIN=$DOMAIN
+        DOMAIN=${DOMAIN}
         EOF
         
-        # Pre-generate DH params (2048-bit for speed)
+        # 2. Start only the database first with health checks
+        docker compose -f docker-compose.prod.yml up -d typesense
+        
+        # 3. Wait for Typesense to be fully ready
+        while ! docker compose -f docker-compose.prod.yml exec typesense \
+          curl -sf http://localhost:8108/health >/dev/null; do
+          echo "Waiting for Typesense to start..."
+          sleep 5
+        done
+        
+        # 4. Start nginx alone for ACME challenges
+        docker compose -f docker-compose.prod.yml up -d nginx
+        
+        # 5. Generate DH parameters in background (non-blocking)
         mkdir -p nginx/config/dhparam
         if [ ! -f nginx/config/dhparam/dhparam.pem ]; then
-          openssl dhparam -out nginx/config/dhparam/dhparam.pem 2048
+          openssl dhparam -out nginx/config/dhparam/dhparam.pem 2048 &
         fi
         
-        # Start services in correct order
-        docker compose -f docker-compose.prod.yml up -d typesense
-        sleep 10 # Wait for typesense to initialize
-        
-        docker compose -f docker-compose.prod.yml up -d backend
-        sleep 5 # Wait for backend
-        
-        docker compose -f docker-compose.prod.yml up -d frontend nginx
-        
-        # Get certificates
+        # 6. Run certbot with correct syntax
         docker compose -f docker-compose.prod.yml run --rm certbot \
-          certonly --webroot -w /var/www/certbot \
+          sh -c "certbot certonly --webroot -w /var/www/certbot \
           --email nina@tymyrddin.dev --agree-tos --non-interactive \
           --force-renewal \
-          -d $DOMAIN -d www.$DOMAIN
+          -d ${DOMAIN} -d www.${DOMAIN}"
         
-        # Final restart with certificates
-        docker compose -f docker-compose.prod.yml restart nginx
+        # 7. Complete full deployment
+        docker compose -f docker-compose.prod.yml up -d --build
+        
+        # 8. Verify DH params completed
+        if [ ! -f nginx/config/dhparam/dhparam.pem ]; then
+          echo "Waiting for DH parameters to generate..."
+          wait # for background process
+        fi
+        
+        # 9. Final nginx reload
+        docker compose -f docker-compose.prod.yml exec nginx nginx -s reload
         EOT
       env:
         TYPESENSE_API_KEY: ${{ secrets.PROD_TYPESENSE_API_KEY }}
         DOMAIN: ${{ secrets.PROD_DOMAIN }}
-      timeout-minutes: 15
+      timeout-minutes: 20
 
     # ======================
     # VERIFICATION PHASE

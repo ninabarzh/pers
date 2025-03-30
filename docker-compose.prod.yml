@@ -7,6 +7,9 @@ services:
     environment:
       - TYPESENSE_API_KEY=${TYPESENSE_API_KEY}
       - TYPESENSE_DATA_DIR=${TYPESENSE_DATA_DIR}
+      - TYPESENSE_STARTUP_WAIT_SECONDS=30
+    volumes:
+        - typesense_data:/data
     deploy:
       resources:
         limits:
