@@ -29,14 +29,22 @@ jobs:
         TYPESENSE_HOST=${{ secrets.PROD_TYPESENSE_HOST }}
         TYPESENSE_PORT=${{ secrets.PROD_TYPESENSE_PORT }}
         TYPESENSE_PROTOCOL=${{ secrets.PROD_TYPESENSE_PROTOCOL }}
-        TYPESENSE_DATA_DIR=${{ secrets.PROD_TYPESENSE_DATA_DIR }}
-        BACKEND_PORT=${{ secrets.PROD_BACKEND_PORT }}
-        FRONTEND_PORT=${{ secrets.PROD_FRONTEND_PORT }}
+        TYPESENSE_DATA_DIR=/data/typesense
+        BACKEND_PORT=8000
+        FRONTEND_PORT=8001
         DOMAIN=${{ secrets.PROD_DOMAIN }}
         EOF
 
-    - name: Build images
+    - name: Build images with secrets
       run: |
+        # Export secrets as environment variables
+        export TYPESENSE_API_KEY=${{ secrets.PROD_TYPESENSE_API_KEY }}
+        export TYPESENSE_HOST=${{ secrets.PROD_TYPESENSE_HOST }}
+        export TYPESENSE_PORT=${{ secrets.PROD_TYPESENSE_PORT }}
+        export TYPESENSE_PROTOCOL=${{ secrets.PROD_TYPESENSE_PROTOCOL }}
+        export DOMAIN=${{ secrets.PROD_DOMAIN }}
+        
+        # Build with the production compose file
         docker-compose -f docker-compose.prod.yml build
 
     - name: Setup SSH
@@ -63,8 +71,8 @@ jobs:
             "echo '--- Running Containers ---' && \
              docker ps -a && \
              echo '--- Backend Health ---' && \
-             curl -fsS http://localhost:${{ secrets.PROD_BACKEND_PORT }}/health && \
+             curl -fsS http://localhost:8000/health && \
              echo '--- Frontend Health ---' && \
-             curl -fsS http://localhost:${{ secrets.PROD_FRONTEND_PORT }}/health && \
+             curl -fsS http://localhost:8001/health && \
              echo '--- Nginx Health ---' && \
              curl -fsS https://${{ secrets.PROD_DOMAIN }}/health"
