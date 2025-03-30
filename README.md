@@ -128,6 +128,26 @@ docker-compose -f docker-compose.dev.yml --profile test up backend-tests fronten
 
 ## Production
 
+### Generate hashes for requirements
+
+```commandline
+pip install hashin
+```
+
+For backend:
+
+```commandline
+cd backend
+hashin -r requirements.txt $(cat requirements.txt | cut -d'=' -f1 | cut -d'>' -f1 | cut -d'<' -f1)
+```
+
+For frontend:
+
+```commandline
+cd frontend
+hashin -r requirements.txt $(cat requirements.txt | cut -d'=' -f1 | cut -d'>' -f1 | cut -d'<' -f1)
+```
+
 To deploy:
 
 ```commandline
