@@ -1,16 +1,14 @@
 # .github/workflows/deploy.yml
-name: Deploy to Production
+name: Deploy to Hetzner
 
 on:
   push:
     tags:
-      - 'v*.*.*'  # Trigger on version tags (e.g., v1.0.0)
-    branches:
-      - main      # Optional: Add if you want branch-based deploys
+      - 'v*.*.*'  # Trigger on semantic version tags (e.g. v1.2.3)
 
 env:
-  DOCKER_COMPOSE_VERSION: '1.29.2'
-  COMPOSE_FILE: 'docker-compose.yml:docker-compose.prod.yml'
+  COMPOSE_FILE: "docker-compose.yml:docker-compose.prod.yml"
+  DOMAIN: "${{ secrets.PROD_DOMAIN }}"
 
 jobs:
   deploy:
@@ -18,29 +16,13 @@ jobs:
     environment: production
     permissions:
       contents: read
-      packages: write
       deployments: write
 
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v2
-
-    - name: Log in to Docker Hub
-      if: github.event_name != 'pull_request'
-      uses: docker/login-action@v2
-      with:
-        username: ${{ secrets.DOCKER_HUB_USERNAME }}
-        password: ${{ secrets.DOCKER_HUB_TOKEN }}
-
-    - name: Install Docker Compose
-      run: |
-        curl -L "https://github.com/docker/compose/releases/download/${DOCKER_COMPOSE_VERSION}/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-        chmod +x /usr/local/bin/docker-compose
-
-    - name: Create production .env file
+    - name: Generate production .env
       run: |
         cat <<EOF > .env.prod
         # Production Environment
@@ -54,19 +36,15 @@ jobs:
         PROD_TYPESENSE_PROTOCOL=${{ secrets.PROD_TYPESENSE_PROTOCOL }}
         PROD_TYPESENSE_DATA_DIR=${{ secrets.PROD_TYPESENSE_DATA_DIR }}
 
-        # Application Ports
+        # Application Configuration
         PROD_BACKEND_PORT=${{ secrets.PROD_BACKEND_PORT }}
         PROD_FRONTEND_PORT=${{ secrets.PROD_FRONTEND_PORT }}
-
-        # Domain Configuration
         DOMAIN=${{ secrets.PROD_DOMAIN }}
-        BACKEND_URL=https://${{ secrets.PROD_DOMAIN }}/api
         EOF
 
-    - name: Build and push Docker images
+    - name: Build production images
       run: |
         docker-compose -f $COMPOSE_FILE build --no-cache
-        docker-compose -f $COMPOSE_FILE push
 
     - name: Deploy to Hetzner
       uses: appleboy/ssh-action@v1.0.0
@@ -83,17 +61,19 @@ jobs:
           sudo mkdir -p /data/static /data/typesense
           sudo chown -R 1000:1000 /data
           
-          # Pull latest images
-          docker-compose -f $COMPOSE_FILE pull
+          # Transfer files
+          rsync -az --delete \
+            --exclude=.git \
+            --exclude=.github \
+            $GITHUB_WORKSPACE/ ${{ secrets.HETZNER_USER }}@${{ secrets.HETZNER_SERVER_IP }}:~/app
           
-          # Stop and remove old containers
-          docker-compose -f $COMPOSE_FILE down --remove-orphans
+          # Deploy
+          cd ~/app
+          docker-compose -f $COMPOSE_FILE pull || true  # Skip if no images exist
+          docker-compose -f $COMPOSE_FILE up -d --build --force-recreate
           
-          # Deploy new version
-          docker-compose -f $COMPOSE_FILE up -d --force-recreate
-          
-          # Clean up unused images
-          docker image prune -af
+          # Cleanup
+          docker system prune -af --volumes
 
     - name: Verify deployment
       uses: appleboy/ssh-action@v1.0.0
@@ -105,11 +85,14 @@ jobs:
           #!/bin/bash
           set -e
           
-          # Check containers are running
-          docker ps --format "table {{.Names}}\t{{.Status}}"
+          echo "--- Running Containers ---"
+          docker ps -a --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
           
-          # Verify backend health
-          curl -sSf https://${{ secrets.PROD_DOMAIN }}/health
+          echo "--- Backend Health Check ---"
+          curl -fsS "http://localhost:${{ secrets.PROD_BACKEND_PORT }}/health" || exit 1
           
-          # Verify frontend health
-          curl -sSf https://${{ secrets.PROD_DOMAIN }}:8001/health
+          echo "--- Frontend Health Check ---"
+          curl -fsS "http://localhost:${{ secrets.PROD_FRONTEND_PORT }}/health" || exit 1
+          
+          echo "--- Nginx SSL Check ---"
+          curl -fsS "https://${{ secrets.PROD_DOMAIN }}/health" || exit 1
