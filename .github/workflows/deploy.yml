@@ -48,11 +48,9 @@ jobs:
             set -euxo pipefail
             cd ${{ env.PROJECT_DIR }} || { echo "ERROR: Failed to access ${{ env.PROJECT_DIR }}"; exit 1; }
             
-            # Create directory structure
             mkdir -p data/{typesense,certbot/{conf,www}} nginx/snippets
             chmod -R 755 data
             
-            # Create .env file with secure permissions
             umask 077
             cat > .env <<'CONFIG'
             # Backend
@@ -78,39 +76,19 @@ jobs:
             set -euxo pipefail
             cd ${{ env.PROJECT_DIR }} || exit 1
             
-            # Set default values if not in .env
             export TYPESENSE_PORT=${TYPESENSE_PORT:-8108}
             export BACKEND_PORT=${BACKEND_PORT:-8000}
-            export FRONTEND_PORT=${FRONTEND_PORT:-8001}
             
-            # Stop any running containers
             docker compose -f ${{ env.COMPOSE_FILE }} down --remove-orphans || true
-            
-            # Build with explicit contexts
-            docker compose -f ${{ env.COMPOSE_FILE }} build \
-              --no-cache \
-              --progress plain \
-              --build-arg BUILDKIT_CONTEXT=./backend \
-              backend
-            
-            docker compose -f ${{ env.COMPOSE_FILE }} build \
-              --no-cache \
-              --progress plain \
-              --build-arg BUILDKIT_CONTEXT=./frontend \
-              frontend
-            
-            # Start services
+            docker compose -f ${{ env.COMPOSE_FILE }} build --no-cache --pull
             docker compose -f ${{ env.COMPOSE_FILE }} up -d --wait
             
-            # Verify network exists
             if ! docker network ls | grep -q app-network; then
               docker network create app-network
             fi
             
-            # Handle Let's Encrypt
-            if [ -d "data/certbot/conf/live" ]; then
+            [ -d "data/certbot/conf/live" ] && \
               docker compose -f ${{ env.COMPOSE_FILE }} run --rm certbot renew --dry-run
-            fi
           EOF
 
       # === VERIFICATION ===
@@ -120,23 +98,20 @@ jobs:
             set -euo pipefail
             cd ${{ env.PROJECT_DIR }} || exit 1
             
-            # Check container status
             if [ $(docker compose -f ${{ env.COMPOSE_FILE }} ps -q | wc -l) -lt 3 ]; then
               docker compose -f ${{ env.COMPOSE_FILE }} logs
               exit 1
             fi
             
-            # Health check function
-            check_service() {
-              local url=$1
-              if ! curl -fsS --max-time 5 --retry 3 "$url"; then
-                echo "Health check failed for $url"
-                return 1
+            check_health() {
+              if ! curl -fsS --max-time 5 "http://localhost:$1/health"; then
+                echo "Health check failed for port $1"
+                exit 1
               fi
             }
             
-            check_service "http://localhost:${{ secrets.PROD_BACKEND_PORT }}/health"
-            check_service "http://localhost:${{ secrets.PROD_FRONTEND_PORT }}/health"
+            check_health ${{ secrets.PROD_BACKEND_PORT }}
+            check_health ${{ secrets.PROD_FRONTEND_PORT }}
           EOF
 
       # === CLEANUP ===
@@ -150,33 +125,21 @@ jobs:
       # All commands include error handling (|| true)
       # Clear section headers in output
       # Final resource summary
-      - name: System cleanup
-        if: always()
+      - name: Cleanup resources
+        if: always()  # Corrected syntax - no parentheses
         run: |
           ssh -i ~/.ssh/id_ed25519 deploy@${{ secrets.HETZNER_SERVER_IP }} <<'EOF'
             set -euo pipefail
-            echo "=== Starting System Cleanup ==="
+            echo "=== Starting Cleanup ==="
             
-            # 1. Docker cleanup
-            echo "- Pruning Docker resources..."
             docker system prune -af --filter "until=24h" --volumes || \
               echo "Docker cleanup completed with warnings"
             
-            # 2. Application cleanup
-            echo "- Cleaning application artifacts..."
             cd ${{ env.PROJECT_DIR }}
-            
-            # Python/Starlette cleanup
-            find . -type d -name "__pycache__" -exec rm -rf {} + || true
-            find . -type f -name "*.pyc" -delete || true
-            
-            # Static files
-            docker compose exec -T backend find /app/static -type f -mtime +30 -delete || true
-            
-            # Typesense optimization
-            docker compose exec -T typesense find /data -name "*.snapshot" -mtime +7 -delete || true
+            find . \( -name "__pycache__" -o -name "*.pyc" \) -delete
+            docker compose exec -T backend find /app/static -type f -mtime +30 -delete
+            docker compose exec -T typesense find /data -name "*.snapshot" -mtime +7 -delete
             
             echo "=== Cleanup Completed ==="
-            echo "Disk usage: $(df -h / | awk 'NR==2{print $5}')"
-            echo "Docker space: $(docker system df --format '{{.TotalSpace}}')"
+            docker system df
           EOF
