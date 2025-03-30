@@ -92,7 +92,8 @@ services:
         target: /etc/letsencrypt
     networks:
       app-network:
-        aliases: [${DOMAIN}]
+        aliases:
+          - ${DOMAIN}
     ports:
       - "80:80"
       - "443:443"
