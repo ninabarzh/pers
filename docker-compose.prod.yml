@@ -5,45 +5,61 @@ services:
       file: docker-compose.yml
       service: typesense
     environment:
-      - TYPESENSE_API_KEY=${PROD_TYPESENSE_API_KEY}
-      - TYPESENSE_DATA_DIR=${PROD_TYPESENSE_DATA_DIR}
+      TYPESENSE_API_KEY: ${PROD_TYPESENSE_API_KEY}
+      TYPESENSE_DATA_DIR: ${PROD_TYPESENSE_DATA_DIR}
     networks:
-      - app-network
+      app-network:
+        aliases: [typesense]
+    volumes:
+      - typesense_data:${PROD_TYPESENSE_DATA_DIR}
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '0.5'
 
   backend:
     extends:
       file: docker-compose.yml
       service: backend
     build:
-      context: .
-      dockerfile: backend/Dockerfile.prod
+      context: ./backend  # Key change
+      dockerfile: Dockerfile.prod
     environment:
-      - PYTHONPATH=${PROD_BACKEND_PYTHONPATH}
-      - TYPESENSE_HOST=typesense
-      - TYPESENSE_PORT=${TYPESENSE_PORT:-8108}
-      - TYPESENSE_API_KEY=${PROD_TYPESENSE_API_KEY}
-      - BACKEND_PORT=${BACKEND_PORT:-8000}
-      - TYPESENSE_PROTOCOL=http
+      PYTHONPATH: ${PROD_BACKEND_PYTHONPATH}
+      TYPESENSE_HOST: typesense
+      TYPESENSE_PORT: ${TYPESENSE_PORT:-8108}
+      TYPESENSE_API_KEY: ${PROD_TYPESENSE_API_KEY}
+      BACKEND_PORT: ${BACKEND_PORT:-8000}
+      TYPESENSE_PROTOCOL: http
     volumes:
-      # read-write for if backend needs to write files
       - static_volume:/app/static:rw
+      - ./backend/src:/app/src:ro
     networks:
       - app-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   frontend:
     extends:
       file: docker-compose.yml
       service: frontend
     build:
-      context: .
-      dockerfile: frontend/Dockerfile.prod
+      context: ./frontend  # Key change
+      dockerfile: Dockerfile.prod
     environment:
-      - PYTHONPATH=${PROD_FRONTEND_PYTHONPATH}
-      - FRONTEND_PORT=8001
+      PYTHONPATH: ${PROD_FRONTEND_PYTHONPATH}
+      FRONTEND_PORT: 8001
     volumes:
       - static_volume:/var/www/static:ro
     networks:
       - app-network
+    depends_on:
+      backend:
+        condition: service_healthy
 
   nginx:
     extends:
@@ -56,7 +72,14 @@ services:
       - certbot_www:/var/www/certbot
       - certbot_conf:/etc/letsencrypt
     networks:
-      - app-network
+      app-network:
+        aliases: [${DOMAIN}]
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - frontend
+      - backend
 
   certbot:
     extends:
@@ -67,10 +90,15 @@ services:
 
 volumes:
   typesense_data:
+    driver: local
   static_volume:
+    driver: local
   certbot_www:
+    driver: local
   certbot_conf:
+    driver: local
 
 networks:
   app-network:
     driver: bridge
+    attachable: true
