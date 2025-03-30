@@ -132,17 +132,15 @@ jobs:
       # Clear section headers in output
       # Final resource summary
       - name: Cleanup resources
-        if: always
+        if: ${{ always() }}
         run: |
           ssh -i ~/.ssh/id_ed25519 deploy@${{ secrets.HETZNER_SERVER_IP }} <<'EOF'
             set -euo pipefail
             echo "=== Starting Cleanup ==="
             
-            # Remove --volumes flag to avoid error
             docker system prune -af --filter "until=24h" || \
               echo "Docker cleanup completed with warnings"
             
-            # Rest of cleanup remains the same
             cd ${{ env.PROJECT_DIR }}
             find . \( -name "__pycache__" -o -name "*.pyc" \) -delete
             docker compose exec -T backend find /app/static -type f -mtime +30 -delete
