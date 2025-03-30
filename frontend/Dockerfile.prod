@@ -18,10 +18,6 @@ ENV PATH="/opt/venv/bin:$PATH"
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Generate and verify hashes (optional security step)
-RUN pip freeze | pip hash --algorithm sha256 > installed_hashes.txt && \
-    grep -q -f <(cut -d'=' -f1 requirements.txt) installed_hashes.txt
-
 # Copy and process static files
 COPY . .
 RUN find src/app/static/ -type f \( -name "*.css" -o -name "*.js" \) \
