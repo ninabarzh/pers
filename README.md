@@ -128,4 +128,9 @@ docker-compose -f docker-compose.dev.yml --profile test up backend-tests fronten
 
 ## Production
 
-Start the production services:
+To deploy:
+
+```commandline
+docker-compose -f docker-compose.yml -f docker-compose.prod.yml build --no-cache
+docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+```

@@ -1,61 +1,64 @@
-# backend/Dockerfile.prod
 # Stage 1: Builder
 FROM python:3.12-slim as builder
 
 WORKDIR /app
 
-# Install minimal system dependencies
+# Install build dependencies (minimal)
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends gcc python3-dev && \
+    apt-get install -y --no-install-recommends \
+    gcc python3-dev libpq-dev && \
     rm -rf /var/lib/apt/lists/*
 
 # Create virtual environment
 RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
-# Install Python dependencies
+# Install Python dependencies with hash checking
 COPY requirements.txt .
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --require-hashes -r requirements.txt
 
-# Copy application code with proper line endings
-RUN echo "Ensuring clean file copying..." && \
-    find . -name '*.py' -exec dos2unix {} \; 2>/dev/null || true
-
+# Copy application code
 COPY src/ ./src/
 
-# Verify imports
-RUN python -c "from src.app.main import app; print('App imports successfully')"
+# Security checks
+RUN find . -name '*.py' -exec chmod 644 {} \; && \
+    python -c "import ast; ast.parse(open('src/app/main.py').read())" && \
+    echo "Syntax validation passed"
 
 # Stage 2: Runtime
 FROM python:3.12-slim
 
 WORKDIR /app
 
-# Install only essential runtime dependencies
+# Install runtime dependencies
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends curl && \
+    apt-get install -y --no-install-recommends \
+    libpq5 curl && \
     rm -rf /var/lib/apt/lists/*
 
-# Copy virtual environment from builder
+# Copy virtual environment
 COPY --from=builder /opt/venv /opt/venv
 
-# Copy application code
+# Copy application code (read-only)
 COPY --from=builder --chown=1000:1000 /app/src/ ./src/
+RUN chmod -R 555 ./src  # Read+execute only
 
-# Create non-root user
-RUN useradd -u 1000 -m myuser && \
+# Non-root user setup
+RUN useradd -u 1000 -m myuser -d /app && \
     chown -R myuser:myuser /app
 
 # Environment configuration
 ENV PATH="/opt/venv/bin:$PATH" \
-    PYTHONPATH="/app/src:/app" \
-    STARTUP_DELAY=10
+    PYTHONPATH="/app/src" \
+    PYTHONUNBUFFERED="1" \
+    STARTUP_DELAY="10"
 
 USER myuser
 
-EXPOSE 8000
+HEALTHCHECK --interval=30s --timeout=10s \
+    CMD curl -f http://localhost:8000/health || exit 1
 
-CMD ["sh", "-c", "echo \"Waiting ${STARTUP_DELAY}s for dependencies...\"; \
-      sleep ${STARTUP_DELAY}; \
-      /opt/venv/bin/uvicorn src.app.main:app --host 0.0.0.0 --port 8000"]
+CMD ["sh", "-c", \
+    "echo \"Waiting ${STARTUP_DELAY}s for dependencies...\"; \
+    sleep ${STARTUP_DELAY}; \
+    uvicorn src.app.main:app --host 0.0.0.0 --port 8000 --no-access-log"]

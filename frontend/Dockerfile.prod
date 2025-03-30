@@ -1,32 +1,25 @@
-# frontend/Dockerfile.prod
 # Stage 1: Builder
 FROM python:3.12-slim as builder
 
 WORKDIR /app
 
-# Install system dependencies including brotli and gzip
+# Install build dependencies
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-    brotli \
-    gzip \
-    gcc \
-    python3-dev && \
+    gcc python3-dev brotli gzip && \
     rm -rf /var/lib/apt/lists/*
 
 # Create virtual environment
 RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
-# Copy and install requirements first (for better caching)
+# Install Python dependencies
 COPY requirements.txt .
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --require-hashes -r requirements.txt
 
-# Copy application code
-COPY src/ /app/src/
-
-# Pre-compress static files
-RUN find /app/src/app/static/ -type f \( -name "*.css" -o -name "*.js" -o -name "*.svg" \) \
+# Copy and process static files
+COPY src/ ./src/
+RUN find src/app/static/ -type f \( -name "*.css" -o -name "*.js" \) \
     -exec gzip -9 -k {} \; \
     -exec brotli -9 -k {} \;
 
@@ -35,33 +28,36 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-# Install runtime dependencies (brotli for serving pre-compressed files)
+# Install runtime dependencies
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends brotli && \
+    apt-get install -y --no-install-recommends \
+    brotli && \
     rm -rf /var/lib/apt/lists/*
 
-# Copy virtual environment from builder
+# Copy virtual environment
 COPY --from=builder /opt/venv /opt/venv
 
 # Copy application code
-COPY --from=builder --chown=1000:1000 /app/src/ /app/src/
+COPY --from=builder --chown=1000:1000 /app/src/ ./src/
+RUN chmod -R 555 ./src  # Read+execute only
 
-# Set up static files
+# Static files setup
 RUN mkdir -p /var/www/static && \
-    cp -r /app/src/app/static/* /var/www/static/ && \
+    cp -r src/app/static/* /var/www/static/ && \
     chmod -R 755 /var/www/static
 
-# Create non-root user
-RUN useradd -u 1000 -m myuser && \
-    chown -R myuser:myuser /app && \
-    chown -R myuser:myuser /var/www/static
+# Non-root user
+RUN useradd -u 1000 -m myuser -d /app && \
+    chown -R myuser:myuser /app /var/www/static
 
 # Environment configuration
 ENV PATH="/opt/venv/bin:$PATH" \
-    PYTHONPATH="/app/src"
+    PYTHONPATH="/app/src" \
+    PYTHONUNBUFFERED="1"
 
 USER myuser
 
-EXPOSE 8001
+HEALTHCHECK --interval=30s --timeout=10s \
+    CMD curl -f http://localhost:8001/health || exit 1
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8001"]
+CMD ["uvicorn", "src.app.main:app", "--host", "0.0.0.0", "--port", "8001", "--no-access-log"]

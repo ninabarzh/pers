@@ -1,179 +1,92 @@
 # docker-compose.yml
 services:
-  # Typesense service (used in both dev and prod)
+  # Typesense Search Service - Used in both development and production
   typesense:
     build:
-      context: .
-      dockerfile: backend/Dockerfile.typesense
-    container_name: typesense-db
+      context: .  # Build from project root
+      dockerfile: backend/Dockerfile.typesense  # Custom Typesense Dockerfile
+    container_name: typesense-db  # Explicit container naming
     ports:
-      - "${TYPESENSE_PORT}:8108"
+      - "${TYPESENSE_PORT}:8108"  # Map configured port to default Typesense port
     environment:
-      - TYPESENSE_API_KEY=${PROD_TYPESENSE_API_KEY}
-      - TYPESENSE_DATA_DIR=${PROD_TYPESENSE_DATA_DIR}
+      - TYPESENSE_API_KEY=${TYPESENSE_API_KEY}  # Authentication key
+      - TYPESENSE_DATA_DIR=${TYPESENSE_DATA_DIR}  # Persistent data location
     volumes:
-      - typesense_data:/data
+      - typesense_data:/data  # Named volume for search data persistence
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8108/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-    restart: unless-stopped
+      test: ["CMD", "curl", "-f", "http://localhost:8108/health"]  # Health endpoint
+      interval: 10s  # Check every 10 seconds
+      timeout: 5s  # Fail if no response in 5s
+      retries: ${TYPESENSE_HEALTHCHECK_RETRIES:-10}  # Configurable retries
     networks:
-      - app-network
+      - app-network  # Connect to application network
 
-  # Backend service (used in both dev and prod)
+  # Backend API Service - Base configuration
   backend:
     build:
-      context: .
-      dockerfile: backend/Dockerfile
-    container_name: backend-app
+      context: .  # Build from project root
+      dockerfile: backend/Dockerfile  # Backend-specific Dockerfile
+    container_name: backend-app  # Explicit container naming
     ports:
-      - "${BACKEND_PORT}:8000"
-    volumes:
-      - ./backend/src:/app/src  # Bind mount for development
+      - "${BACKEND_PORT}:8000"  # Map configured port to default backend port
     environment:
-      - PYTHONPATH=${PROD_BACKEND_PYTHONPATH}
-      - TYPESENSE_HOST=${PROD_TYPESENSE_HOST}
-      - TYPESENSE_PORT=${PROD_TYPESENSE_PORT}
-      - TYPESENSE_API_KEY=${PROD_TYPESENSE_API_KEY}
-      - BACKEND_PORT=${PROD_BACKEND_PORT}
-      - TYPESENSE_PROTOCOL=${PROD_TYPESENSE_PROTOCOL:-http}  # Default to http if not set
+      # Environment configuration with defaults
+      - ENV=${ENV:-development}  # dev/prod environment
+      - DEBUG=${DEBUG:-true}  # Debug mode
+      - PYTHONPATH=${BACKEND_PYTHONPATH:-/app/src}  # Python module path
+      # Typesense connection parameters
+      - TYPESENSE_HOST=${TYPESENSE_HOST}
+      - TYPESENSE_PORT=${TYPESENSE_PORT}
+      - TYPESENSE_API_KEY=${TYPESENSE_API_KEY}
+      # Application parameters
+      - BACKEND_PORT=${BACKEND_PORT}
+      - TYPESENSE_PROTOCOL=${TYPESENSE_PROTOCOL:-http}  # Default to HTTP
+      # Healthcheck and timeout parameters
+      - BACKEND_STARTUP_DELAY=${BACKEND_STARTUP_DELAY:-10}
+      - TYPESENSE_CONNECTION_TIMEOUT=${TYPESENSE_CONNECTION_TIMEOUT:-30}
+    volumes:
+      # Development mounts - overridden in production
+      - ./backend/src:/app/src  # Source code mount
+      - ./backend/static:/app/static  # Static files mount
     depends_on:
       typesense:
-        condition: service_healthy
+        condition: service_healthy  # Wait for healthy Typesense
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:$${BACKEND_PORT:-8000}/health || exit 1"]
+      test: ["CMD-SHELL", "curl -f http://localhost:${BACKEND_PORT}/health || exit 1"]
       interval: 30s
-      timeout: 60s  # Increased from 10s
-      retries: 5    # Increased from 3
-      start_period: 60s
-    restart: unless-stopped
+      timeout: ${TYPESENSE_CONNECTION_TIMEOUT:-30}s
+      retries: ${TYPESENSE_HEALTHCHECK_RETRIES:-5}
     networks:
       - app-network
 
-  # Frontend service (used in both dev and prod)
+  # Frontend Web Service - Base configuration
   frontend:
     build:
-      context: .
-      dockerfile: frontend/Dockerfile
-    container_name: frontend-app
+      context: .  # Build from project root
+      dockerfile: frontend/Dockerfile  # Frontend-specific Dockerfile
+    container_name: frontend-app  # Explicit container naming
     ports:
-      - "${FRONTEND_PORT:-8001}:8001"
-    volumes:
-      - ./frontend/src:/app/src  # Bind mount for development
+      - "${FRONTEND_PORT}:8001"  # Map configured port to default frontend port
     environment:
-      - PYTHONPATH=${PROD_FRONTEND_PYTHONPATH}
-      - FRONTEND_PORT=${PROD_FRONTEND_PORT}
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-    depends_on:
-      - backend
-    restart: unless-stopped
-    networks:
-      - app-network
-
-  nginx:
-    image: nginx:latest
-    profiles: ["production"]
-    container_name: nginx-proxy
+      # Environment configuration with defaults
+      - ENV=${ENV:-development}
+      - PYTHONPATH=${FRONTEND_PYTHONPATH:-/app}
+      - FRONTEND_PORT=${FRONTEND_PORT}
+      - BACKEND_URL=${BACKEND_URL:-http://backend:8000}  # Default backend URL
     volumes:
-      - ./nginx/nginx.prod.conf:/etc/nginx/nginx.conf
-      - ./nginx/snippets:/etc/nginx/snippets
-      - static_volume:/var/www/static
-      - certbot_www:/var/www/certbot
-      - certbot_conf:/etc/letsencrypt
-    ports:
-      - "80:80"
-      - "443:443"
+      - ./frontend/src:/app/src  # Source code mount
+      - ./frontend/src/app/static:/app/src/app/static  # Explicit static files mount
     depends_on:
-      frontend:
-        condition: service_healthy
-      backend:
-        condition: service_healthy
-      certbot:
-        condition: service_started
-    networks:
-      - app-network
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-
-  certbot:
-    image: certbot/certbot
-    profiles: ["production"]
-    container_name: certbot
-    volumes:
-      - certbot_www:/var/www/certbot
-      - certbot_conf:/etc/letsencrypt
-    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew --post-hook \"nginx -s reload\"; sleep 12h & wait $${!}; done;'"
-    depends_on:
-      nginx:
-        condition: service_started
-    networks:
-      - app-network
-    restart: unless-stopped
-
-  # Backend tests (development only)
-  backend-tests:
-    profiles: ["development"]
-    build:
-      context: .
-      dockerfile: backend/Dockerfile
-    container_name: backend-tests
-    depends_on:
-      backend:
-        condition: service_healthy
-      typesense:
-        condition: service_healthy
-    volumes:
-      - ./backend/src:/app/src
-      - ./backend/tests:/app/tests
-    env_file:
-      - .env
-    environment:
-      - TEST_ENV=development
-      - DEBUG=true
-    command: ["./run_tests.sh"]
+      - backend  # Requires backend to be available
     networks:
       - app-network
 
-  # Frontend tests (development only)
-  frontend-tests:
-    profiles: ["development"]
-    build:
-      context: .
-      dockerfile: frontend/Dockerfile
-    container_name: frontend-tests
-    depends_on:
-      backend:
-        condition: service_healthy
-      frontend:
-        condition: service_healthy
-    volumes:
-      - ./frontend/src:/app/src
-      - ./frontend/tests:/app/tests
-    env_file:
-      - .env
-    environment:
-      - PYTHONPATH=${PROD_FRONTEND_PYTHONPATH:-/app/src}
-      - FRONTEND_PORT=${PROD_FRONTEND_PORT:-8001}
-    command: ["./run_tests.sh"]
-    networks:
-      - app-network
-
-volumes:
-  typesense_data:
-  static_volume:
-  certbot_www:
-  certbot_conf:
-
+# Network configuration
 networks:
   app-network:
-    driver: bridge
+    driver: bridge  # Default bridge network for inter-container communication
+
+# Volume declarations
+volumes:
+  typesense_data:  # Persistent storage for Typesense
+    driver: local

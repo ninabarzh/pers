@@ -3,15 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
     <title>{% block title %}Green Finder{% endblock %}</title>
     <!-- Bootstrap CSS FIRST -->
-    <link rel="stylesheet" href="{{ url_for('static', path='css/bootstrap.min.css') }}">
+    <link rel="stylesheet" href="/static/css/bootstrap.min.css">
 
     <!-- THEN your custom CSS -->
-    <link rel="stylesheet" href="{{ url_for('static', path='css/styles.css') }}">
+    <link rel="stylesheet" href="/static/css/styles.css">
 
     <!-- Bootstrap Icons LAST -->
-    <link rel="stylesheet" href="{{ url_for('static', path='fonts/bootstrap-icons.css') }}">
+    <link rel="stylesheet" href="/static/fonts/bootstrap-icons.css">
     {% block extra_css %}{% endblock %}
 </head>
 <body class="page-body">

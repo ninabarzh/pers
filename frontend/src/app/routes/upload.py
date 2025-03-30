@@ -6,8 +6,6 @@ import os
 import logging
 import json
 
-
-
 # Initialize logging
 logger = logging.getLogger(__name__)
 

@@ -1,138 +1,91 @@
 # docker-compose.prod.yml
 services:
   typesense:
-    extends:
-      file: docker-compose.yml
-      service: typesense
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.typesense
     environment:
-      TYPESENSE_API_KEY: ${PROD_TYPESENSE_API_KEY}
-      TYPESENSE_DATA_DIR: ${PROD_TYPESENSE_DATA_DIR}
-    networks:
-      app-network:
-        aliases: [typesense]
-    volumes:
-    - type: volume
-      source: typesense_data
-      target: /data
+      - TYPESENSE_API_KEY=${PROD_TYPESENSE_API_KEY}
+      - TYPESENSE_DATA_DIR=${PROD_TYPESENSE_DATA_DIR}
     deploy:
       resources:
         limits:
-          memory: 1G
-          cpus: '0.5'
+          memory: 2G
+          cpus: '1.0'
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8108/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
 
   backend:
-    extends:
-      file: docker-compose.yml
-      service: backend
     build:
-      context: ./backend  # Key change
-      dockerfile: Dockerfile.prod
+      context: .
+      dockerfile: backend/Dockerfile.prod
     environment:
-      PATH: "/usr/local/bin:/root/.local/bin:${PATH}"
-      PYTHONPATH: ${PROD_BACKEND_PYTHONPATH}
-      TYPESENSE_HOST: typesense
-      TYPESENSE_PORT: ${PROD_TYPESENSE_PORT:-8108}
-      TYPESENSE_API_KEY: ${PROD_TYPESENSE_API_KEY}
-      BACKEND_PORT: ${PROD_BACKEND_PORT:-8000}
-      TYPESENSE_PROTOCOL: http
-      # timeout/retry parameters
-      STARTUP_DELAY: 15  # Increase if needed
-      BACKEND_STARTUP_DELAY: 10
-      TYPESENSE_CONNECTION_TIMEOUT: 30
-      TYPESENSE_HEALTHCHECK_RETRIES: 5
-    volumes:
-      - type: volume
-        source: static_volume
-        target: /app/static
-        read_only: false
-      # - ./backend/src:/app/src:ro
-    networks:
-      - app-network
+      - ENV=production
+      - DEBUG=false
+      - PYTHONPATH=/app/src
+      - PROD_TYPESENSE_API_KEY=${PROD_TYPESENSE_API_KEY}
+      - PROD_TYPESENSE_HOST=${PROD_TYPESENSE_HOST}
+      - PROD_TYPESENSE_PORT=${PROD_TYPESENSE_PORT}
+      - PROD_TYPESENSE_PROTOCOL=${PROD_TYPESENSE_PROTOCOL}
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:$${BACKEND_PORT:-8000}/health || exit 1"]
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
-      timeout: 30s
-      retries: 5
-      start_period: 90s  # Extended initial period
-    depends_on:
-      typesense:
-        condition: service_healthy
+      timeout: 10s
 
   frontend:
-    extends:
-      file: docker-compose.yml
-      service: frontend
     build:
-      context: ./frontend  # Key change
-      dockerfile: Dockerfile.prod
+      context: .
+      dockerfile: frontend/Dockerfile.prod
     environment:
-      PYTHONPATH: ${PROD_FRONTEND_PYTHONPATH}
-      FRONTEND_PORT: 8001
-    volumes:
-      - type: volume
-        source: static_volume
-        target: /var/www/static
-        read_only: true
-      # - ./frontend/src:/app/src:ro
-    networks:
-      - app-network
-    depends_on:
-      backend:
-        condition: service_healthy
+      - ENV=production
+      - BACKEND_URL=https://${PROD_DOMAIN}/api
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.3'
 
   nginx:
-    extends:
-      file: docker-compose.yml
-      service: nginx
+    image: nginx:1.25-alpine
     volumes:
-      - type: bind
-        source: ./nginx/nginx.prod.conf
-        target: /etc/nginx/nginx.conf
-      - type: bind
-        source: ./nginx/snippets
-        target: /etc/nginx/snippets
-      - type: volume
-        source: static_volume
-        target: /var/www/static
-      - type: volume
-        source: certbot_www
-        target: /var/www/certbot
-      - type: volume
-        source: certbot_conf
-        target: /etc/letsencrypt
-    networks:
-      app-network:
-        aliases:
-          - ${DOMAIN}
+      - ./nginx/nginx.prod.conf:/etc/nginx/nginx.conf
+      - ./nginx/snippets:/etc/nginx/snippets
+      - static_volume:/var/www/static
+      - certbot_www:/var/www/certbot
+      - certbot_conf:/etc/letsencrypt
     ports:
       - "80:80"
       - "443:443"
     depends_on:
-      - frontend
       - backend
+      - frontend
 
   certbot:
-    extends:
-      file: docker-compose.yml
-      service: certbot
-    networks:
-      - app-network
+    image: certbot/certbot:latest
+    volumes:
+      - certbot_www:/var/www/certbot
+      - certbot_conf:/etc/letsencrypt
+    command: renew --webroot -w /var/www/certbot --quiet
+    restart: unless-stopped
 
 volumes:
-  typesense_data:
-    driver: local
-    name: typesense_data
   static_volume:
-    driver: local
-    name: static_volume
+    driver_opts:
+      type: none
+      device: /data/static
+      o: bind
   certbot_www:
-    driver: local
-    name: certbot_www
   certbot_conf:
-    driver: local
-    name: certbot_conf
 
 networks:
-  app-network:
+  default:
     driver: bridge
-    attachable: true
+    name: app-network

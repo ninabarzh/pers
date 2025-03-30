@@ -1,0 +1,50 @@
+services:
+  # Backend Test Service - Development only
+  backend-tests:
+    profiles: ["development"]  # Only included in dev environment
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: backend-tests
+    volumes:
+      - ./backend/src:/app/src  # Source code
+      - ./backend/tests:/app/tests  # Test files
+    environment:
+      - TEST_ENV=development  # Test-specific environment
+      - TYPESENSE_API_KEY=${TEST_TYPESENSE_API_KEY:-test_key}  # Test API key
+    depends_on:
+      - typesense  # Requires Typesense to be available
+    command: ["./run_tests.sh"]  # Custom test runner
+    networks:
+      - app-network
+
+  # Frontend Test Service - Development only
+  frontend-tests:
+    profiles: ["development"]
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    container_name: frontend-tests
+    volumes:
+      - ./frontend/src:/app/src
+      - ./frontend/tests:/app/tests
+    depends_on:
+      - frontend  # Requires frontend to be available
+    command: ["./run_tests.sh"]
+    networks:
+      - app-network
+
+  # Development NGINX Proxy
+  nginx:
+    image: nginx:stable-perl  # Stable NGINX with Perl
+    container_name: nginx-dev
+    ports:
+      - "8080:8080"  # Non-privileged port for dev
+    volumes:
+      - ./nginx/nginx.dev.conf:/etc/nginx/nginx.conf  # Dev-specific config
+      - ./frontend/src/app/static:/var/www/static  # Static files
+    depends_on:
+      - frontend
+      - backend
+    networks:
+      - app-network

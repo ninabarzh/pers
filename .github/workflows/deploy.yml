@@ -3,174 +3,113 @@ name: Deploy to Production
 
 on:
   push:
-    branches: [main]
+    tags:
+      - 'v*.*.*'  # Trigger on version tags (e.g., v1.0.0)
+    branches:
+      - main      # Optional: Add if you want branch-based deploys
 
 env:
-  PROJECT_DIR: /opt/pers
-  COMPOSE_FILE: docker-compose.prod.yml
+  DOCKER_COMPOSE_VERSION: '1.29.2'
+  COMPOSE_FILE: 'docker-compose.yml:docker-compose.prod.yml'
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    environment: production
+    permissions:
+      contents: read
+      packages: write
+      deployments: write
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
+    - name: Checkout code
+      uses: actions/checkout@v4
 
-      # === SSH SETUP ===
-      - name: Configure SSH
-        run: |
-          mkdir -p ~/.ssh
-          chmod 700 ~/.ssh
-          echo "${{ secrets.HETZNER_SERVER_IP }} ${{ secrets.HETZNER_SERVER_FINGERPRINT }}" > ~/.ssh/known_hosts
-          echo "${{ secrets.HETZNER_SSH_KEY }}" > ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed25519
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v2
 
-      # === DEPLOY CODE ===
-      - name: Rsync code to server
-        run: |
-          rsync -avz --delete \
-            -e "ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=yes" \
-            --exclude=".git" \
-            --exclude=".github" \
-            --exclude="node_modules" \
-            --exclude=".env" \
-            --exclude="data" \
-            --exclude="*.pyc" \
-            --exclude="__pycache__" \
-            ./ deploy@${{ secrets.HETZNER_SERVER_IP }}:${{ env.PROJECT_DIR }}/
+    - name: Log in to Docker Hub
+      if: github.event_name != 'pull_request'
+      uses: docker/login-action@v2
+      with:
+        username: ${{ secrets.DOCKER_HUB_USERNAME }}
+        password: ${{ secrets.DOCKER_HUB_TOKEN }}
 
-      # === SERVER SETUP ===
-      - name: Initialize server
-        run: |
-          ssh -i ~/.ssh/id_ed25519 deploy@${{ secrets.HETZNER_SERVER_IP }} <<'EOF'
-            set -euxo pipefail
-            cd ${{ env.PROJECT_DIR }}
-            
-            mkdir -p data/{typesense,certbot/{conf,www}} nginx/snippets
-            chmod -R 755 data
-            
-            umask 077
-            cat > .env <<'CONFIG'
-            # Backend
-            PROD_BACKEND_PORT=${{ secrets.PROD_BACKEND_PORT }}
-            BACKEND_PORT=${{ secrets.PROD_BACKEND_PORT }}
-            PROD_BACKEND_PYTHONPATH=${{ secrets.PROD_BACKEND_PYTHONPATH }}
-            
-            # Frontend
-            PROD_FRONTEND_PORT=${{ secrets.PROD_FRONTEND_PORT }}
-            PROD_FRONTEND_PYTHONPATH=${{ secrets.PROD_FRONTEND_PYTHONPATH }}
-            
-            # Typesense
-            PROD_TYPESENSE_API_KEY=${{ secrets.PROD_TYPESENSE_API_KEY }}
-            PROD_TYPESENSE_DATA_DIR=/data
-            TYPESENSE_DATA_DIR=/data
-            PROD_TYPESENSE_HOST=typesense
-            PROD_TYPESENSE_PORT=${{ secrets.PROD_TYPESENSE_PORT }}
-            TYPESENSE_PORT=${{ secrets.PROD_TYPESENSE_PORT }}
-            
-            # Domain
-            DOMAIN=${{ secrets.PROD_DOMAIN }}
-            CONFIG
-          EOF
+    - name: Install Docker Compose
+      run: |
+        curl -L "https://github.com/docker/compose/releases/download/${DOCKER_COMPOSE_VERSION}/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+        chmod +x /usr/local/bin/docker-compose
 
-      # === DEPLOY SERVICES ===
-      - name: Verify requirements.txt exists
-        run: |
-          if [ ! -f "backend/requirements.txt" ]; then
-            echo "Error: backend/requirements.txt is missing" >&2
-            exit 1
-          fi
-          cat backend/requirements.txt
+    - name: Create production .env file
+      run: |
+        cat <<EOF > .env.prod
+        # Production Environment
+        ENV=production
+        DEBUG=false
 
-      - name: Start containers
-        run: |
-          ssh -i ~/.ssh/id_ed25519 deploy@${{ secrets.HETZNER_SERVER_IP }} <<'EOF'
-            set -euxo pipefail
-            cd ${{ env.PROJECT_DIR }}
-            
-            # Clean rebuild
-            docker compose -f ${{ env.COMPOSE_FILE }} build --no-cache backend
-            
-            # Start services with proper ordering
-            docker compose -f ${{ env.COMPOSE_FILE }} up -d typesense
-            sleep 30  # Wait for Typesense
-            
-            # Start backend with retries
-            for i in {1..3}; do
-              docker compose -f ${{ env.COMPOSE_FILE }} up -d backend && break || sleep 15
-            done
-            
-            # Extended verification
-            sleep 30  # Additional grace period
-            if ! docker compose -f ${{ env.COMPOSE_FILE }} ps backend | grep -q "(healthy)"; then
-              echo "Backend health check failed. Logs:"
-              docker compose -f ${{ env.COMPOSE_FILE }} logs backend
-              echo "Trying direct health check:"
-              curl -v http://localhost:${{ secrets.PROD_BACKEND_PORT }}/health || true
-              exit 1
-            fi
-          EOF
+        # Typesense Configuration
+        PROD_TYPESENSE_API_KEY=${{ secrets.PROD_TYPESENSE_API_KEY }}
+        PROD_TYPESENSE_HOST=${{ secrets.PROD_TYPESENSE_HOST }}
+        PROD_TYPESENSE_PORT=${{ secrets.PROD_TYPESENSE_PORT }}
+        PROD_TYPESENSE_PROTOCOL=${{ secrets.PROD_TYPESENSE_PROTOCOL }}
+        PROD_TYPESENSE_DATA_DIR=${{ secrets.PROD_TYPESENSE_DATA_DIR }}
 
-      # === VERIFICATION ===
-      - name: Verify deployment
-        run: |
-          ssh -i ~/.ssh/id_ed25519 deploy@${{ secrets.HETZNER_SERVER_IP }} <<'EOF'
-            set -euo pipefail
-            cd ${{ env.PROJECT_DIR }} || exit 1
-            
-            if [ $(docker compose -f ${{ env.COMPOSE_FILE }} ps -q | wc -l) -lt 3 ]; then
-              docker compose -f ${{ env.COMPOSE_FILE }} logs
-              exit 1
-            fi
-            
-            check_health() {
-              if ! curl -fsS --max-time 5 "http://localhost:$1/health"; then
-                echo "Health check failed for port $1"
-                exit 1
-              fi
-            }
-            
-            check_health ${{ secrets.PROD_BACKEND_PORT }}
-            check_health ${{ secrets.PROD_FRONTEND_PORT }}
-          EOF
+        # Application Ports
+        PROD_BACKEND_PORT=${{ secrets.PROD_BACKEND_PORT }}
+        PROD_FRONTEND_PORT=${{ secrets.PROD_FRONTEND_PORT }}
 
-      # === CLEANUP ===
-      # Removes __pycache__ directories
-      # Deletes compiled .pyc files
-      # Handles log rotation (adjusts ./logs to log location)
-      # Cleans old static files (30+ days)
-      # Runs inside the backend container
-      # Removes old snapshots (7+ days)
-      # Maintains search performance
-      # All commands include error handling (|| true)
-      # Clear section headers in output
-      # Final resource summary
-      - name: Cleanup resources
-        if: ${{ always() }}
-        run: |
-          ssh -i ~/.ssh/id_ed25519 deploy@${{ secrets.HETZNER_SERVER_IP }} <<'EOF'
-            set -euo pipefail
-            echo "=== Starting Cleanup ==="
-            
-            # Skip pruning if no containers exist
-            if [ $(docker ps -q | wc -l) -gt 0 ]; then
-              docker system prune -af || echo "Docker cleanup completed with warnings"
-            fi
-            
-            cd ${{ env.PROJECT_DIR }}
-            find . \( -name "__pycache__" -o -name "*.pyc" \) -delete || true
-            
-            # Only try to clean containers if they're running
-            if docker compose ps backend | grep -q "Up"; then
-              docker compose exec -T backend find /app/static -type f -mtime +30 -delete || true
-            fi
-            
-            if docker compose ps typesense | grep -q "Up"; then
-              docker compose exec -T typesense find /data -name "*.snapshot" -mtime +7 -delete || true
-            fi
-            
-            echo "=== Cleanup Completed ==="
-            docker system df
-          EOF
+        # Domain Configuration
+        DOMAIN=${{ secrets.PROD_DOMAIN }}
+        BACKEND_URL=https://${{ secrets.PROD_DOMAIN }}/api
+        EOF
+
+    - name: Build and push Docker images
+      run: |
+        docker-compose -f $COMPOSE_FILE build --no-cache
+        docker-compose -f $COMPOSE_FILE push
+
+    - name: Deploy to Hetzner
+      uses: appleboy/ssh-action@v1.0.0
+      with:
+        host: ${{ secrets.HETZNER_SERVER_IP }}
+        username: ${{ secrets.HETZNER_USER }}
+        key: ${{ secrets.HETZNER_SSH_KEY }}
+        fingerprint: ${{ secrets.HETZNER_SERVER_FINGERPRINT }}
+        script: |
+          #!/bin/bash
+          set -e
+          
+          # Create required directories
+          sudo mkdir -p /data/static /data/typesense
+          sudo chown -R 1000:1000 /data
+          
+          # Pull latest images
+          docker-compose -f $COMPOSE_FILE pull
+          
+          # Stop and remove old containers
+          docker-compose -f $COMPOSE_FILE down --remove-orphans
+          
+          # Deploy new version
+          docker-compose -f $COMPOSE_FILE up -d --force-recreate
+          
+          # Clean up unused images
+          docker image prune -af
+
+    - name: Verify deployment
+      uses: appleboy/ssh-action@v1.0.0
+      with:
+        host: ${{ secrets.HETZNER_SERVER_IP }}
+        username: ${{ secrets.HETZNER_USER }}
+        key: ${{ secrets.HETZNER_SSH_KEY }}
+        script: |
+          #!/bin/bash
+          set -e
+          
+          # Check containers are running
+          docker ps --format "table {{.Names}}\t{{.Status}}"
+          
+          # Verify backend health
+          curl -sSf https://${{ secrets.PROD_DOMAIN }}/health
+          
+          # Verify frontend health
+          curl -sSf https://${{ secrets.PROD_DOMAIN }}:8001/health

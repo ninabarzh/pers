@@ -34,11 +34,13 @@ COPY .env .env
 
 # Create a non-root user and switch to it
 RUN useradd -m myuser && \
-    chown -R myuser:myuser /app  # Change ownership of /app
+    chown -R myuser:myuser /app  # Change ownership of /app \
+RUN mkdir -p /app/src/app/static && \
+    chown -R myuser:myuser /app/src/app/static
 USER myuser
 
 # Expose the port the app runs on
 EXPOSE 8001
 
 # Command to run the application (default)
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8001"]
+CMD ["uvicorn", "src.app.main:app", "--host", "0.0.0.0", "--port", "8001"]
