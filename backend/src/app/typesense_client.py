@@ -5,42 +5,47 @@ from dotenv import load_dotenv
 import time
 import logging
 import os
-
-# Always load .env, production values will come from environment
-load_dotenv('../.env')
-
-# Load environment variables (fall back to non-prefixed versions for local development)
-TYPESENSE_API_KEY = os.getenv('PROD_TYPESENSE_API_KEY') or os.getenv('TYPESENSE_API_KEY')
-TYPESENSE_HOST = os.getenv('PROD_TYPESENSE_HOST') or os.getenv('TYPESENSE_HOST')
-TYPESENSE_PORT = os.getenv('PROD_TYPESENSE_PORT') or os.getenv('TYPESENSE_PORT')
-TYPESENSE_PROTOCOL = os.getenv('PROD_TYPESENSE_PROTOCOL') or os.getenv('TYPESENSE_PROTOCOL', 'http')  # Default to http
-
-# Validate required environment variables
-if not TYPESENSE_API_KEY:
-    raise ValueError("TYPESENSE_API_KEY is missing. Check your .env files.")
-if not TYPESENSE_HOST:
-    raise ValueError("TYPESENSE_HOST is missing. Check your .env files.")
-if not TYPESENSE_PORT:
-    raise ValueError("TYPESENSE_PORT is missing. Check your .env files.")
+from pathlib import Path
 
 # Initialize logging
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
+
 class TypesenseClient:
-    def __init__(self):
-        """
-        Initialize the Typesense client and ensure the collection exists.
-        """
+    _instance = None
+
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+            if os.getenv('ENVIRONMENT', 'development') == 'development':
+                env_path = Path(__file__).parent.parent.parent / '.env'
+                load_dotenv(env_path)
+            cls._instance._initialize_client()
+        return cls._instance
+
+    def _initialize_client(self):
+        """Initialize client with only officially supported configuration"""
+        self.TYPESENSE_API_KEY = os.getenv('PROD_TYPESENSE_API_KEY') or os.getenv('TYPESENSE_API_KEY')
+        self.TYPESENSE_HOST = os.getenv('PROD_TYPESENSE_HOST') or os.getenv('TYPESENSE_HOST', 'typesense')
+        self.TYPESENSE_PORT = os.getenv('PROD_TYPESENSE_PORT') or os.getenv('TYPESENSE_PORT', '8108')
+        self.TYPESENSE_PROTOCOL = os.getenv('PROD_TYPESENSE_PROTOCOL') or os.getenv('TYPESENSE_PROTOCOL', 'http')
+
+        if not self.TYPESENSE_API_KEY:
+            raise ValueError("TYPESENSE_API_KEY is missing")
+
+        # Only use officially supported configuration keys
         self.client = typesense.Client({
-            'api_key': TYPESENSE_API_KEY,
+            'api_key': self.TYPESENSE_API_KEY,
             'nodes': [{
-                'host': TYPESENSE_HOST,
-                'port': TYPESENSE_PORT,
-                'protocol': TYPESENSE_PROTOCOL,
-            }],
+                'host': self.TYPESENSE_HOST,
+                'port': self.TYPESENSE_PORT,
+                'protocol': self.TYPESENSE_PROTOCOL
+            }]
         })
+
         self.ensure_collection_exists()
+
 
     def ensure_collection_exists(self):
         """
@@ -88,18 +93,25 @@ class TypesenseClient:
                     raise e
 
     def search(self, query: str):
-        """
-        Search the ossfinder collection for documents matching the provided query.
-        Query Fields: The search is performed on the name, description, and organisation fields.
-        """
-        try:
-            return self.client.collections['ossfinder'].documents.search({
-                'q': query,
-                'query_by': 'name,description,organisation',  # Specify fields to search
-            })
-        except TypesenseClientError as e:
-            logger.error(f"Error searching for query '{query}': {e}")
-            raise e
+        """Search with retry logic for temporary failures"""
+        max_retries = 3
+        retry_delay = 1
+
+        for attempt in range(max_retries):
+            try:
+                return self.client.collections['ossfinder'].documents.search({
+                    'q': query,
+                    'query_by': 'name,description,organisation'
+                })
+            except ServiceUnavailable as e:
+                if attempt == max_retries - 1:
+                    logger.error(f"Search failed after {max_retries} attempts")
+                    raise e
+                time.sleep(retry_delay * (attempt + 1))
+                continue
+            except TypesenseClientError as e:
+                logger.error(f"Search error: {e}")
+                raise e
 
     def document_exists(self, document_id: str):
         """
