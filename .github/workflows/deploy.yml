@@ -15,14 +15,14 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Install Docker Compose
+    - name: Install Docker Compose locally
       run: |
         curl -L "https://github.com/docker/compose/releases/download/v2.23.0/docker-compose-linux-$(uname -m)" -o /usr/local/bin/docker-compose
         chmod +x /usr/local/bin/docker-compose
 
-    - name: Create .env file
+    - name: Generate production .env
       run: |
-        cat <<EOF > .env
+        cat <<EOF > .env.prod
         ENV=production
         DEBUG=false
         TYPESENSE_API_KEY=${{ secrets.PROD_TYPESENSE_API_KEY }}
@@ -35,16 +35,6 @@ jobs:
         DOMAIN=${{ secrets.PROD_DOMAIN }}
         EOF
 
-    - name: Build containers
-      env:
-        TYPESENSE_API_KEY: ${{ secrets.PROD_TYPESENSE_API_KEY }}
-        TYPESENSE_HOST: ${{ secrets.PROD_TYPESENSE_HOST }}
-        TYPESENSE_PORT: ${{ secrets.PROD_TYPESENSE_PORT }}
-        TYPESENSE_PROTOCOL: ${{ secrets.PROD_TYPESENSE_PROTOCOL }}
-        DOMAIN: ${{ secrets.PROD_DOMAIN }}
-      run: |
-        docker-compose -f docker-compose.prod.yml build
-
     - name: Setup SSH
       uses: webfactory/ssh-agent@v0.7.0
       with:
@@ -52,21 +42,36 @@ jobs:
 
     - name: Deploy to Hetzner
       run: |
+        # Copy files to server
         rsync -avz --delete \
               -e "ssh -o StrictHostKeyChecking=no" \
               . ${{ secrets.HETZNER_USER }}@${{ secrets.HETZNER_SERVER_IP }}:~/app/
-
+        
+        # SSH commands to setup and deploy
         ssh -o StrictHostKeyChecking=no \
-            ${{ secrets.HETZNER_USER }}@${{ secrets.HETZNER_SERVER_IP }} \
-            "cd ~/app && \
-             docker-compose -f docker-compose.prod.yml down && \
-             docker-compose -f docker-compose.prod.yml up -d"
+            ${{ secrets.HETZNER_USER }}@${{ secrets.HETZNER_SERVER_IP }} << 'EOF'
+        # Install Docker and Docker Compose
+        sudo apt-get update
+        sudo apt-get install -y docker.io
+        sudo systemctl enable --now docker
+        sudo curl -L "https://github.com/docker/compose/releases/download/v2.23.0/docker-compose-linux-$(uname -m)" -o /usr/local/bin/docker-compose
+        sudo chmod +x /usr/local/bin/docker-compose
+        
+        # Move to app directory and deploy
+        cd ~/app
+        docker-compose -f docker-compose.prod.yml down
+        docker-compose -f docker-compose.prod.yml up -d --build
+        EOF
 
     - name: Verify deployment
       run: |
         ssh -o StrictHostKeyChecking=no \
             ${{ secrets.HETZNER_USER }}@${{ secrets.HETZNER_SERVER_IP }} \
-            "echo '--- Running Containers ---' && \
+            "echo '--- Docker Version ---' && \
+             docker --version && \
+             echo '--- Docker Compose Version ---' && \
+             docker-compose --version && \
+             echo '--- Running Containers ---' && \
              docker ps -a && \
              echo '--- Backend Health ---' && \
              curl -fsS http://localhost:8000/health && \
