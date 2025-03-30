@@ -15,16 +15,6 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Prepare for build
-      run: |
-        # Backup of original requirements files
-        cp backend/requirements.txt backend/requirements.original.txt
-        cp frontend/requirements.txt frontend/requirements.original.txt
-        
-        # Create clean versions without hashes
-        sed -i '/--hash=/d' backend/requirements.txt
-        sed -i '/--hash=/d' frontend/requirements.txt
-
     - name: Install Docker Compose
       run: |
         curl -L "https://github.com/docker/compose/releases/download/v2.23.0/docker-compose-linux-$(uname -m)" -o /usr/local/bin/docker-compose
@@ -47,20 +37,13 @@ jobs:
 
     - name: Build images
       run: |
-        # Load environment variables for build
         export TYPESENSE_API_KEY=${{ secrets.PROD_TYPESENSE_API_KEY }}
         export TYPESENSE_HOST=${{ secrets.PROD_TYPESENSE_HOST }}
         export TYPESENSE_PORT=${{ secrets.PROD_TYPESENSE_PORT }}
         export BACKEND_PORT=${{ secrets.PROD_BACKEND_PORT }}
         export FRONTEND_PORT=${{ secrets.PROD_FRONTEND_PORT }}
         
-        # Build with clean requirements files
         docker-compose -f docker-compose.yml -f docker-compose.prod.yml build --no-cache
-
-    - name: Restore requirements files
-      run: |
-        mv backend/requirements.original.txt backend/requirements.txt
-        mv frontend/requirements.original.txt frontend/requirements.txt
 
     - name: Setup SSH
       uses: webfactory/ssh-agent@v0.7.0
