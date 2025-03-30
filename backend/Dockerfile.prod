@@ -1,46 +1,50 @@
 # backend/dockerfile.prod
-# Stage 1: Build
+# Stage 1: Builder
 FROM python:3.12-slim as builder
 
 WORKDIR /app
 
-# Install dependencies
+# Install system dependencies
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends gcc python3-dev && \
+    rm -rf /var/lib/apt/lists/*
+
+# Create virtual environment
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Install Python dependencies
 COPY requirements.txt .
-RUN pip install --no-cache-dir --user -r requirements.txt
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
-COPY src/ /app/src/
+COPY src/ ./src/
 
 # Stage 2: Runtime
 FROM python:3.12-slim
 
 WORKDIR /app
 
-# Copy installed dependencies from builder
-COPY --from=builder /root/.local /root/.local
-COPY --from=builder /app/src/ /app/src/
+# Copy virtual environment from builder
+COPY --from=builder /opt/venv /opt/venv
 
-# Create static directory (will be overridden by volume mount)
-RUN mkdir -p /app/static && chmod 755 /app/static
+# Copy application code with proper permissions
+COPY --from=builder --chown=1000:1000 /app/src/ ./src/
 
-# Ensure scripts in .local are usable
-ENV PATH=/root/.local/bin:$PATH
+# Create non-root user
+RUN useradd -u 1000 -m myuser && \
+    chown -R myuser:myuser /app
 
-# Install uvicorn system-wide first
-RUN pip install --no-cache-dir uvicorn && \
-    # Then install your app requirements
-    pip install --no-cache-dir -r requirements.txt && \
-    # Create non-root user
-    useradd -m myuser && \
-    # Set permissions
-    chown -R myuser:myuser /app && \
-    # Ensure uvicorn is in PATH
-    ln -s /root/.local/bin/uvicorn /usr/local/bin/uvicorn
+# Environment configuration
+ENV PATH="/opt/venv/bin:$PATH" \
+    PYTHONPATH="/app/src"
+
+# Verify uvicorn is in PATH (debugging step)
+RUN which uvicorn || { echo "Uvicorn not found in PATH"; exit 1; }
 
 USER myuser
 
-# Expose the port
 EXPOSE 8000
 
-# Start the application
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000"]
