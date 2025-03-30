@@ -46,7 +46,7 @@ jobs:
         run: |
           ssh -i ~/.ssh/id_ed25519 deploy@${{ secrets.HETZNER_SERVER_IP }} <<'EOF'
             set -euxo pipefail
-            cd ${{ env.PROJECT_DIR }} || { echo "ERROR: Failed to access ${{ env.PROJECT_DIR }}"; exit 1; }
+            cd ${{ env.PROJECT_DIR }}
             
             mkdir -p data/{typesense,certbot/{conf,www}} nginx/snippets
             chmod -R 755 data
@@ -55,6 +55,7 @@ jobs:
             cat > .env <<'CONFIG'
             # Backend
             PROD_BACKEND_PORT=${{ secrets.PROD_BACKEND_PORT }}
+            BACKEND_PORT=${{ secrets.PROD_BACKEND_PORT }}
             PROD_BACKEND_PYTHONPATH=${{ secrets.PROD_BACKEND_PYTHONPATH }}
             
             # Frontend
@@ -63,9 +64,14 @@ jobs:
             
             # Typesense
             PROD_TYPESENSE_API_KEY=${{ secrets.PROD_TYPESENSE_API_KEY }}
-            PROD_TYPESENSE_DATA_DIR=${{ secrets.PROD_TYPESENSE_DATA_DIR }}
+            PROD_TYPESENSE_DATA_DIR=/data
+            TYPESENSE_DATA_DIR=/data
             PROD_TYPESENSE_HOST=typesense
-            PROD_TYPESENSE_PORT=8108
+            PROD_TYPESENSE_PORT=${{ secrets.PROD_TYPESENSE_PORT }}
+            TYPESENSE_PORT=${{ secrets.PROD_TYPESENSE_PORT }}
+            
+            # Domain
+            DOMAIN=${{ secrets.PROD_DOMAIN }}
             CONFIG
           EOF
 
@@ -74,37 +80,19 @@ jobs:
         run: |
           ssh -i ~/.ssh/id_ed25519 deploy@${{ secrets.HETZNER_SERVER_IP }} <<'EOF'
             set -euxo pipefail
-            cd ${{ env.PROJECT_DIR }} || exit 1
+            cd ${{ env.PROJECT_DIR }}
             
-            # Create necessary directories
-            mkdir -p data/{typesense,certbot/{conf,www}} nginx/snippets
-            chmod -R 755 data
+            # Wait for Typesense to be fully ready
+            docker compose -f ${{ env.COMPOSE_FILE }} up -d typesense
+            sleep 10  # Give Typesense time to initialize
             
-            # Export variables
-            export PROD_TYPESENSE_DATA_DIR=/data
-            export PROD_TYPESENSE_PORT=${{ secrets.PROD_TYPESENSE_PORT }}
-            export PROD_BACKEND_PORT=${{ secrets.PROD_BACKEND_PORT }}
-            export PROD_TYPESENSE_API_KEY=${{ secrets.PROD_TYPESENSE_API_KEY }}
+            # Start backend with retries
+            for i in {1..3}; do
+              docker compose -f ${{ env.COMPOSE_FILE }} up -d backend && break || sleep 15
+            done
             
-            # Validate configuration
-            if ! docker compose -f ${{ env.COMPOSE_FILE }} config; then
-              echo "Configuration validation failed - showing full config for debugging:"
-              docker compose -f ${{ env.COMPOSE_FILE }} config
-              exit 1
-            fi
-            
-            # Run deployment
-            docker compose -f ${{ env.COMPOSE_FILE }} down --remove-orphans || true
-            docker compose -f ${{ env.COMPOSE_FILE }} build --no-cache --pull
+            # Start remaining services
             docker compose -f ${{ env.COMPOSE_FILE }} up -d --wait
-            
-            # Ensure network exists
-            docker network inspect app-network >/dev/null 2>&1 || \
-              docker network create app-network
-            
-            # Certbot renewal check
-            [ -d "data/certbot/conf/live" ] && \
-              docker compose -f ${{ env.COMPOSE_FILE }} run --rm certbot renew --dry-run
           EOF
 
       # === VERIFICATION ===
