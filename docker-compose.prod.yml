@@ -28,6 +28,7 @@ services:
       context: ./backend  # Key change
       dockerfile: Dockerfile.prod
     environment:
+      PATH: "/usr/local/bin:/root/.local/bin:${PATH}"
       PYTHONPATH: ${PROD_BACKEND_PYTHONPATH}
       TYPESENSE_HOST: typesense
       TYPESENSE_PORT: ${PROD_TYPESENSE_PORT:-8108}
@@ -49,7 +50,7 @@ services:
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:$${BACKEND_PORT:-8000}/health || exit 1"]
       interval: 30s
-      timeout: 60s
+      timeout: 30s
       retries: 5
       start_period: 60s
 

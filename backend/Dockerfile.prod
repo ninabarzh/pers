@@ -29,6 +29,10 @@ ENV PATH=/root/.local/bin:$PATH
 # Create a non-root user
 RUN useradd -m myuser && \
     chown -R myuser:myuser /app
+RUN pip install --no-cache-dir uvicorn && \
+    chmod +x /usr/local/bin/uvicorn && \
+    useradd -m myuser && \
+    chown -R myuser:myuser /app
 USER myuser
 
 # Expose the port
