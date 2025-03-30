@@ -69,22 +69,27 @@ jobs:
             CONFIG
           EOF
 
-    # === DEPLOY SERVICES ===
+      # === DEPLOY SERVICES ===
       - name: Start containers
         run: |
           ssh -i ~/.ssh/id_ed25519 deploy@${{ secrets.HETZNER_SERVER_IP }} <<'EOF'
             set -euxo pipefail
             cd ${{ env.PROJECT_DIR }} || exit 1
             
-            # Export all required variables from secrets
+            # Export all required variables
             export PROD_TYPESENSE_PORT=${{ secrets.PROD_TYPESENSE_PORT }}
             export PROD_BACKEND_PORT=${{ secrets.PROD_BACKEND_PORT }}
             export PROD_TYPESENSE_API_KEY=${{ secrets.PROD_TYPESENSE_API_KEY }}
+            export TYPESENSE_PORT=${{ secrets.PROD_TYPESENSE_PORT }}  # For backward compatibility
+            export BACKEND_PORT=${{ secrets.PROD_BACKEND_PORT }}      # For backward compatibility
             
-            # Validate compose config first
-            docker compose -f ${{ env.COMPOSE_FILE }} config
+            # Validate config first
+            docker compose -f ${{ env.COMPOSE_FILE }} config || {
+              echo "Configuration validation failed"
+              exit 1
+            }
             
-            # Rest of the deployment remains the same
+            # Rest of deployment
             docker compose -f ${{ env.COMPOSE_FILE }} down --remove-orphans || true
             docker compose -f ${{ env.COMPOSE_FILE }} build --no-cache --pull
             docker compose -f ${{ env.COMPOSE_FILE }} up -d --wait
@@ -138,13 +143,22 @@ jobs:
             set -euo pipefail
             echo "=== Starting Cleanup ==="
             
-            docker system prune -af --filter "until=24h" || \
-              echo "Docker cleanup completed with warnings"
+            # Skip pruning if no containers exist
+            if [ $(docker ps -q | wc -l) -gt 0 ]; then
+              docker system prune -af || echo "Docker cleanup completed with warnings"
+            fi
             
             cd ${{ env.PROJECT_DIR }}
-            find . \( -name "__pycache__" -o -name "*.pyc" \) -delete
-            docker compose exec -T backend find /app/static -type f -mtime +30 -delete
-            docker compose exec -T typesense find /data -name "*.snapshot" -mtime +7 -delete
+            find . \( -name "__pycache__" -o -name "*.pyc" \) -delete || true
+            
+            # Only try to clean containers if they're running
+            if docker compose ps backend | grep -q "Up"; then
+              docker compose exec -T backend find /app/static -type f -mtime +30 -delete || true
+            fi
+            
+            if docker compose ps typesense | grep -q "Up"; then
+              docker compose exec -T typesense find /data -name "*.snapshot" -mtime +7 -delete || true
+            fi
             
             echo "=== Cleanup Completed ==="
             docker system df

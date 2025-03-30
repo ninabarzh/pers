@@ -11,7 +11,7 @@ services:
       app-network:
         aliases: [typesense]
     volumes:
-      - typesense_data:/data
+      - "typesense_data:/data"
     deploy:
       resources:
         limits:
