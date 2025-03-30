@@ -34,6 +34,10 @@ services:
       TYPESENSE_API_KEY: ${PROD_TYPESENSE_API_KEY}
       BACKEND_PORT: ${PROD_BACKEND_PORT:-8000}
       TYPESENSE_PROTOCOL: http
+      # timeout/retry parameters
+      BACKEND_STARTUP_DELAY: 10
+      TYPESENSE_CONNECTION_TIMEOUT: 30
+      TYPESENSE_HEALTHCHECK_RETRIES: 5
     volumes:
       - type: volume
         source: static_volume

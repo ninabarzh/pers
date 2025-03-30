@@ -82,16 +82,20 @@ jobs:
             set -euxo pipefail
             cd ${{ env.PROJECT_DIR }}
             
-            # Wait for Typesense to be fully ready
+            # Start services in order with proper waiting
             docker compose -f ${{ env.COMPOSE_FILE }} up -d typesense
-            sleep 10  # Give Typesense time to initialize
+            sleep 20  # Wait for Typesense to fully initialize
             
-            # Start backend with retries
-            for i in {1..3}; do
-              docker compose -f ${{ env.COMPOSE_FILE }} up -d backend && break || sleep 15
-            done
+            docker compose -f ${{ env.COMPOSE_FILE }} up -d backend
+            sleep 30  # Wait for backend initialization
             
-            # Start remaining services
+            # Verify backend is healthy before proceeding
+            if ! docker compose -f ${{ env.COMPOSE_FILE }} ps backend | grep -q "(healthy)"; then
+              echo "Backend failed to become healthy"
+              docker compose -f ${{ env.COMPOSE_FILE }} logs backend
+              exit 1
+            fi
+            
             docker compose -f ${{ env.COMPOSE_FILE }} up -d --wait
           EOF
 
