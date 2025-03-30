@@ -3,12 +3,11 @@ name: Deploy to Hetzner
 
 on:
   push:
-    tags:
-      - 'v*.*.*'  # Trigger on semantic version tags (e.g. v1.2.3)
+    branches:
+      - main  # Triggers on pushes to main branch
 
 env:
   COMPOSE_FILE: "docker-compose.yml:docker-compose.prod.yml"
-  DOMAIN: "${{ secrets.PROD_DOMAIN }}"
 
 jobs:
   deploy:
@@ -21,6 +20,11 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
+
+    - name: Install Docker Compose
+      run: |
+        curl -L "https://github.com/docker/compose/releases/download/v2.23.0/docker-compose-linux-$(uname -m)" -o /usr/local/bin/docker-compose
+        chmod +x /usr/local/bin/docker-compose
 
     - name: Generate production .env
       run: |
@@ -46,53 +50,39 @@ jobs:
       run: |
         docker-compose -f $COMPOSE_FILE build --no-cache
 
-    - name: Deploy to Hetzner
-      uses: appleboy/ssh-action@v1.0.0
+    - name: Setup SSH
+      uses: webfactory/ssh-agent@v0.7.0
       with:
-        host: ${{ secrets.HETZNER_SERVER_IP }}
-        username: ${{ secrets.HETZNER_USER }}
-        key: ${{ secrets.HETZNER_SSH_KEY }}
-        fingerprint: ${{ secrets.HETZNER_SERVER_FINGERPRINT }}
-        script: |
-          #!/bin/bash
-          set -e
-          
-          # Create required directories
-          sudo mkdir -p /data/static /data/typesense
-          sudo chown -R 1000:1000 /data
-          
-          # Transfer files
-          rsync -az --delete \
-            --exclude=.git \
-            --exclude=.github \
-            $GITHUB_WORKSPACE/ ${{ secrets.HETZNER_USER }}@${{ secrets.HETZNER_SERVER_IP }}:~/app
-          
-          # Deploy
-          cd ~/app
-          docker-compose -f $COMPOSE_FILE pull || true  # Skip if no images exist
-          docker-compose -f $COMPOSE_FILE up -d --build --force-recreate
-          
-          # Cleanup
-          docker system prune -af --volumes
+        ssh-private-key: ${{ secrets.HETZNER_SSH_KEY }}
+
+    - name: Deploy to Hetzner
+      run: |
+        ssh -o StrictHostKeyChecking=no \
+            ${{ secrets.HETZNER_USER }}@${{ secrets.HETZNER_SERVER_IP }} \
+            "mkdir -p ~/app && chmod 700 ~/app"
+        
+        rsync -avz --delete \
+              --exclude=.git \
+              --exclude=.github \
+              -e "ssh -o StrictHostKeyChecking=no" \
+              ./ ${{ secrets.HETZNER_USER }}@${{ secrets.HETZNER_SERVER_IP }}:~/app/
+
+        ssh -o StrictHostKeyChecking=no \
+            ${{ secrets.HETZNER_USER }}@${{ secrets.HETZNER_SERVER_IP }} \
+            "cd ~/app && \
+             docker-compose -f $COMPOSE_FILE down && \
+             docker-compose -f $COMPOSE_FILE up -d --build --force-recreate && \
+             docker system prune -af --volumes"
 
     - name: Verify deployment
-      uses: appleboy/ssh-action@v1.0.0
-      with:
-        host: ${{ secrets.HETZNER_SERVER_IP }}
-        username: ${{ secrets.HETZNER_USER }}
-        key: ${{ secrets.HETZNER_SSH_KEY }}
-        script: |
-          #!/bin/bash
-          set -e
-          
-          echo "--- Running Containers ---"
-          docker ps -a --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
-          
-          echo "--- Backend Health Check ---"
-          curl -fsS "http://localhost:${{ secrets.PROD_BACKEND_PORT }}/health" || exit 1
-          
-          echo "--- Frontend Health Check ---"
-          curl -fsS "http://localhost:${{ secrets.PROD_FRONTEND_PORT }}/health" || exit 1
-          
-          echo "--- Nginx SSL Check ---"
-          curl -fsS "https://${{ secrets.PROD_DOMAIN }}/health" || exit 1
+      run: |
+        ssh -o StrictHostKeyChecking=no \
+            ${{ secrets.HETZNER_USER }}@${{ secrets.HETZNER_SERVER_IP }} \
+            "echo '--- Running Containers ---' && \
+             docker ps -a && \
+             echo '--- Backend Health ---' && \
+             curl -fsS http://localhost:${{ secrets.PROD_BACKEND_PORT }}/health && \
+             echo '--- Frontend Health ---' && \
+             curl -fsS http://localhost:${{ secrets.PROD_FRONTEND_PORT }}/health && \
+             echo '--- Nginx Health ---' && \
+             curl -fsS https://${{ secrets.PROD_DOMAIN }}/health"
