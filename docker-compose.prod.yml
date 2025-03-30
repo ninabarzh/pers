@@ -11,7 +11,7 @@ services:
       app-network:
         aliases: [typesense]
     volumes:
-      - typesense_data:${PROD_TYPESENSE_DATA_DIR}
+      - typesense_data:/data
     deploy:
       resources:
         limits:
@@ -28,13 +28,13 @@ services:
     environment:
       PYTHONPATH: ${PROD_BACKEND_PYTHONPATH}
       TYPESENSE_HOST: typesense
-      TYPESENSE_PORT: ${TYPESENSE_PORT:-8108}
+      TYPESENSE_PORT: ${PROD_TYPESENSE_PORT:-8108}
       TYPESENSE_API_KEY: ${PROD_TYPESENSE_API_KEY}
-      BACKEND_PORT: ${BACKEND_PORT:-8000}
+      BACKEND_PORT: ${PROD_BACKEND_PORT:-8000}
       TYPESENSE_PROTOCOL: http
     volumes:
       - static_volume:/app/static:rw
-      - ./backend/src:/app/src:ro
+      # - ./backend/src:/app/src:ro
     networks:
       - app-network
     healthcheck:
@@ -55,6 +55,7 @@ services:
       FRONTEND_PORT: 8001
     volumes:
       - static_volume:/var/www/static:ro
+      # - ./frontend/src:/app/src:ro
     networks:
       - app-network
     depends_on:
