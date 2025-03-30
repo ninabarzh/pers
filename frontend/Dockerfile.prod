@@ -1,19 +1,27 @@
 # frontend/dockerfile.prod
-# Stage 1: Build
+# Stage 1: Builder
 FROM python:3.12-slim as builder
 
 WORKDIR /app
 
-# Install dependencies
+# Install system dependencies first
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends brotli gzip && \
+    rm -rf /var/lib/apt/lists/*
+
+# Create virtual environment
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Install Python dependencies
 COPY requirements.txt .
-RUN pip install --no-cache-dir --user -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
 COPY src/ /app/src/
 
-# Pre-compress files
-RUN apt-get update && apt-get install -y brotli gzip && \
-    find /app/src/app/static/ -type f \( -name "*.css" -o -name "*.js" -o -name "*.svg" \) \
+# Pre-compress static files
+RUN find /app/src/app/static/ -type f \( -name "*.css" -o -name "*.js" -o -name "*.svg" \) \
     -exec gzip -9 -k {} \; \
     -exec brotli -9 -k {} \;
 
@@ -22,27 +30,33 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-# Copy installed dependencies from builder
-COPY --from=builder /root/.local /root/.local
-COPY --from=builder /app/src/ /app/src/
+# Install runtime dependencies
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends brotli && \
+    rm -rf /var/lib/apt/lists/*
 
-# Ensure static files are in the correct location for Nginx
+# Copy virtual environment from builder
+COPY --from=builder /opt/venv /opt/venv
+
+# Copy application code
+COPY --from=builder --chown=1000:1000 /app/src/ /app/src/
+
+# Set up static files
 RUN mkdir -p /var/www/static && \
     cp -r /app/src/app/static/* /var/www/static/ && \
     chmod -R 755 /var/www/static
 
-# Ensure scripts in .local are usable
-ENV PATH=/root/.local/bin:$PATH
+# Create non-root user
+RUN useradd -u 1000 -m myuser && \
+    chown -R myuser:myuser /app && \
+    chown -R myuser:myuser /var/www/static
 
-# Create a non-root user
-RUN useradd -m myuser && \
-    chown -R myuser:myuser /app
-RUN chmod +x /root/.local/bin/uvicorn && \
-    chown -R myuser:myuser /root/.local
-USER myuser # Run as non-root user
+# Environment configuration
+ENV PATH="/opt/venv/bin:$PATH" \
+    PYTHONPATH="/app/src"
 
-# Expose the port
+USER myuser
+
 EXPOSE 8001
 
-# Start the application
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8001"]
