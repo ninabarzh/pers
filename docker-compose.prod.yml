@@ -75,7 +75,7 @@ services:
       dockerfile: Dockerfile.prod
     environment:
       - ENV=production
-      - BACKEND_URL=https://${DOMAIN}/api  # Changed from PROD_DOMAIN to DOMAIN
+      - BACKEND_URL=https://${DOMAIN}  # Changed from PROD_DOMAIN to DOMAIN
     deploy:
       resources:
         limits:
