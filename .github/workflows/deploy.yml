@@ -137,41 +137,67 @@ jobs:
       - name: Set up SSL certificates
         run: |
           ssh -T -o StrictHostKeyChecking=no deploy@${{ secrets.HETZNER_SERVER_IP }} << 'EOT'
-          set -ex  # Enable debugging and exit on error
+          set -ex
           cd /home/deploy/app
-          
-          # Ensure network exists
-          docker network create app-network || true
-          
-          # Stop nginx if running (with force in case of stuck container)
-          docker compose -f docker-compose.prod.yml stop nginx || true
-          docker compose -f docker-compose.prod.yml rm -f nginx || true
-          
-          # Clean up any previous certbot containers
-          docker compose -f docker-compose.prod.yml rm -f certbot || true
-          
-          # Run certbot with explicit timeout and cleanup
-          docker compose -f docker-compose.prod.yml run --rm --service-ports certbot \
-            sh -c "certbot certonly --standalone \
-            --non-interactive \
-            --email ${{ secrets.PROD_EMAIL }} \
-            --agree-tos \
-            -d ${{ secrets.PROD_DOMAIN }} \
-            -d www.${{ secrets.PROD_DOMAIN }} \
-            --preferred-challenges http \
-            --force-renewal \
-            --http-01-port 8080"  # Use alternative port if needed
-          
-          # Verify certificates exist
-          sudo ls -la /home/deploy/app_data/certbot/conf/live/${{ secrets.PROD_DOMAIN }}/
-          
-          # Full restart with SSL
+        
+          # Ensure docker socket is accessible
+          sudo chown root:docker /var/run/docker.sock
+          sudo chmod 660 /var/run/docker.sock
+        
+          # Clean up previous runs
+          docker compose -f docker-compose.prod.yml stop nginx certbot || true
+          docker compose -f docker-compose.prod.yml rm -f nginx certbot || true
+        
+          # Ensure certificate directories exist
+          sudo mkdir -p /home/deploy/app_data/certbot/{www,conf}/live
+          sudo chown -R deploy:docker /home/deploy/app_data/certbot
+          sudo chmod -R 775 /home/deploy/app_data/certbot
+        
+          # Free port 80
+          sudo lsof -ti :80 | xargs -r sudo kill -9 || true
+        
+          # Obtain certificates with retry logic
+          for i in {1..3}; do
+            if docker compose -f docker-compose.prod.yml run --rm --service-ports certbot \
+              certonly \
+              --standalone \
+              --non-interactive \
+              --agree-tos \
+              --email ${{ secrets.PROD_EMAIL }} \
+              -d ${{ secrets.PROD_DOMAIN }} \
+              -d www.${{ secrets.PROD_DOMAIN }} \
+              --preferred-challenges http \
+              --http-01-port 80; then
+              break
+            fi
+            sleep $((i*10))
+          done
+        
+          # Verify certificates were obtained
+          if [ ! -f "/home/deploy/app_data/certbot/conf/live/${{ secrets.PROD_DOMAIN }}/fullchain.pem" ]; then
+            echo "❌ Certificate files not found!"
+            exit 1
+          fi
+        
+          # Restart services with proper permissions
+          sudo chown -R deploy:docker /home/deploy/app_data
           docker compose -f docker-compose.prod.yml up -d --force-recreate
-          
-          # Verify nginx is using SSL
-          sleep 10  # Wait for nginx to initialize
-          docker compose -f docker-compose.prod.yml logs nginx | grep "SSL"
-          curl -Ikv https://${{ secrets.PROD_DOMAIN }} 2>&1 | grep -i "SSL\|certificate"
+        
+          # Verify nginx configuration
+          if ! docker compose -f docker-compose.prod.yml exec nginx nginx -t; then
+            echo "❌ Nginx configuration test failed!"
+            docker compose -f docker-compose.prod.yml logs nginx
+            exit 1
+          fi
+        
+          # Verify HTTPS access
+          if ! curl -IfsSk --retry 3 --retry-delay 5 "https://${{ secrets.PROD_DOMAIN }}" >/dev/null; then
+            echo "❌ HTTPS connection failed!"
+            docker compose -f docker-compose.prod.yml logs nginx
+            exit 1
+          fi
+        
+          echo "✅ SSL setup completed successfully"
           EOT
 
       - name: Verify deployment
