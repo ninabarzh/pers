@@ -120,8 +120,36 @@ jobs:
         run: |
           ssh -T -o StrictHostKeyChecking=no deploy@${{ secrets.HETZNER_SERVER_IP }} << 'EOT'
           cd ~/app
-          echo "=== Container Status ==="
+          
+          echo "=== Full Container Status ==="
           docker compose -f docker-compose.prod.yml ps -a
+          
+          echo "\n=== Container Logs ==="
+          echo "---- Backend ----"
+          docker compose -f docker-compose.prod.yml logs backend --tail=50 || true
+          echo "---- Frontend ----"
+          docker compose -f docker-compose.prod.yml logs frontend --tail=50 || true
+          echo "---- Nginx ----"
+          docker compose -f docker-compose.prod.yml logs nginx --tail=50 || true
+          
+          echo "\n=== Network Connectivity ==="
+          echo "Backend to Typesense:"
+          docker compose -f docker-compose.prod.yml exec backend curl -v http://typesense:8108/health || true
+          
+          echo "\n=== Port Checks ==="
+          echo "Backend port (${{ secrets.PROD_BACKEND_PORT }}):"
+          docker compose -f docker-compose.prod.yml exec backend netstat -tulnp | grep ${{ secrets.PROD_BACKEND_PORT }} || true
+          
           echo "\n=== HTTPS Test ==="
-          curl -Isk https://${{ secrets.PROD_DOMAIN }} | grep -E 'HTTP|Location'
+          if ! curl -Isk https://${{ secrets.PROD_DOMAIN }} | grep -E 'HTTP|Location'; then
+            echo "HTTPS test failed, trying HTTP:"
+            curl -Isk http://${{ secrets.PROD_DOMAIN }} | grep -E 'HTTP|Location' || true
+            echo "Nginx direct test:"
+            docker compose -f docker-compose.prod.yml exec nginx curl -Is http://localhost || true
+            exit 1
+          fi
+          
+          echo "\n=== Final Health Checks ==="
+          echo "Typesense:" $(docker compose -f docker-compose.prod.yml exec typesense curl -s http://localhost:8108/health)
+          echo "Backend:" $(docker compose -f docker-compose.prod.yml exec backend curl -s http://localhost:${{ secrets.PROD_BACKEND_PORT }}/health)
           EOT
