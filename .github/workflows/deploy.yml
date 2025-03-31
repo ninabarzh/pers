@@ -77,8 +77,14 @@ jobs:
           # =========================================
           # PHASE 3: SERVICES DEPLOYMENT
           # =========================================
-          # Start Typesense first with health check
-          docker compose -f docker-compose.prod.yml up -d --build typesense
+          # Explicitly build Typesense image first
+          docker build -f backend/Dockerfile.typesense.prod \
+            -t app-typesense \
+            --build-arg TYPESENSE_API_KEY=${{ secrets.PROD_TYPESENSE_API_KEY }} \
+            .
+
+          # Start Typesense with health check
+          docker compose -f docker-compose.prod.yml up -d typesense
 
           # Wait for Typesense to be fully ready
           for i in {1..30}; do

@@ -1,20 +1,19 @@
-# Production-optimized Typesense configuration
-FROM typesense/typesense:0.24.1@sha256:2c8b5e8f9a3e9b1f5a5c8d3b7c3e8d3b7c3e8d3b7c3e8d3b7c3e8d3b7c3e8d3  # Pinned hash
+# backend/Dockerfile.typesense.prod
+FROM typesense/typesense:0.24.1@sha256:2c8b5e8f9a3e9b1f5a5c8d3b7c3e8d3b7c3e8d3b7c3e8d3b7c3e8d3b7c3e8d3
 
 # Minimal dependencies (only curl for health checks)
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     curl && \
     rm -rf /var/lib/apt/lists/* && \
-    apt-get clean && \
-    rm -rf /tmp/* /var/tmp/*
+    apt-get clean
 
 # Secure user and permissions
 RUN useradd -r -u 1001 -g root typesense && \
     mkdir -p /data && \
     mkdir -p /data/logs && \
     chown -R typesense:root /data && \
-    chmod -R 750 /data  # Restricted permissions
+    chmod -R 750 /data
 
 # Enhanced health check with longer timeouts
 HEALTHCHECK --interval=15s --timeout=30s --start-period=60s --retries=10 \
@@ -29,11 +28,6 @@ CMD ["/usr/bin/typesense-server", \
     "--api-key=${TYPESENSE_API_KEY}", \
     "--listen-port=8108", \
     "--enable-cors=false", \
-    "--max-memory-ratio=0.8", \          # Limit memory usage
-    "--snapshot-interval=120", \         # Less frequent snapshots
-    "--log-dir=/data/logs"]              # Separate log directory
-
-# Labels for monitoring
-LABEL maintainer="ops@yourdomain.com" \
-      org.opencontainers.image.description="Production Typesense Search Service" \
-      io.typesense.monitoring.enabled="true"
+    "--max-memory-ratio=0.8", \
+    "--snapshot-interval=120", \
+    "--log-dir=/data/logs"]
