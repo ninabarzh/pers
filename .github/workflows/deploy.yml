@@ -29,22 +29,23 @@ jobs:
       # ======================
       - name: Transfer files to server
         run: |
-          # Verify source directory exists first
-          echo "Current directory contents:"
-          ls -la
+          # Verify source directory exists
+          echo "Contents of GITHUB_WORKSPACE:"
+          ls -la "$GITHUB_WORKSPACE"
           
-          # Use absolute path for reliable transfer
-          SOURCE_DIR="$GITHUB_WORKSPACE"
-          echo "Syncing from: $SOURCE_DIR"
+          # Create destination directory if it doesn't exist
+          ssh -o StrictHostKeyChecking=no deploy@${{ secrets.HETZNER_SERVER_IP }} \
+            "mkdir -p ~/app"
           
+          # Perform the sync with proper paths
           rsync -avz --delete \
             --exclude='.git' \
             --exclude='.github' \
             --exclude='.env*' \
             --exclude='node_modules' \
             -e "ssh -o StrictHostKeyChecking=no" \
-            "$SOURCE_DIR/" \  # Note the trailing slash
-            deploy@${{ secrets.HETZNER_SERVER_IP }}:~/app/
+            "$GITHUB_WORKSPACE/" \
+            "deploy@${{ secrets.HETZNER_SERVER_IP }}:~/app/"
 
       # ======================
       # STAGE 3: SERVER SETUP
