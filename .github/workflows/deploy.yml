@@ -16,10 +16,8 @@ jobs:
       # ======================
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
-      - name: Configure SSH access
+      - name: Setup SSH
         uses: webfactory/ssh-agent@v0.7.0
         with:
           ssh-private-key: ${{ secrets.HETZNER_SSH_KEY }}
@@ -35,8 +33,7 @@ jobs:
             --exclude='.env*' \
             --exclude='node_modules' \
             -e "ssh -o StrictHostKeyChecking=no" \
-            "$GITHUB_WORKSPACE/" \
-            "deploy@${{ secrets.HETZNER_SERVER_IP }}:~/app/"
+            . deploy@${{ secrets.HETZNER_SERVER_IP }}:~/app/
 
       # ======================
       # STAGE 3: SERVER SETUP
@@ -45,10 +42,8 @@ jobs:
         run: |
           ssh -T -o StrictHostKeyChecking=no deploy@${{ secrets.HETZNER_SERVER_IP }} << 'EOT'
           cd ~/app
-
-          # =========================================
-          # PHASE 1: ENVIRONMENT CONFIGURATION
-          # =========================================
+          
+          # Create production .env without sudo
           cat <<EOF > .env
           TYPESENSE_API_KEY=${{ secrets.PROD_TYPESENSE_API_KEY }}
           TYPESENSE_DATA_DIR=/data/typesense
@@ -62,96 +57,71 @@ jobs:
           EOF
           chmod 600 .env
 
-          # =========================================
-          # PHASE 2: INFRASTRUCTURE SETUP
-          # =========================================
-          sudo mkdir -p /data/typesense
-          sudo chown -R 1001:root /data/typesense
-          sudo chmod -R 770 /data/typesense
+          # Create data directory with docker group permissions
+          mkdir -p /data/typesense
+          chown -R 1001:docker /data/typesense
+          chmod -R 770 /data/typesense
 
-          # Generate DH params in background if missing
-          mkdir -p nginx/config/dhparam
-          [ ! -f nginx/config/dhparam/dhparam.pem ] && \
-            openssl dhparam -out nginx/config/dhparam/dhparam.pem 2048 &
+          # Build and start Typesense first
+          docker compose -f docker-compose.prod.yml build typesense
+          docker compose -f docker-compose.prod.yml up -d typesense
 
-          # =========================================
-          # PHASE 3: SERVICES DEPLOYMENT
-          # =========================================
-          # Start Typesense first with health check
-          docker compose -f docker-compose.prod.yml up -d --build typesense
-
-          # Wait for Typesense to be fully ready
+          # Wait for Typesense with health check
           for i in {1..30}; do
             if docker compose -f docker-compose.prod.yml exec typesense \
               curl -sf http://localhost:8108/health; then
-              echo "Typesense ready after $i attempts"
+              echo "Typesense ready!"
               break
             fi
             sleep 5
-            [ $i -eq 15 ] && docker compose -f docker-compose.prod.yml restart typesense
           done
 
-          # Initialize Typesense collection if needed
+          # Initialize collection if needed
           if ! docker compose -f docker-compose.prod.yml exec typesense \
             curl -sf -H "X-TYPESENSE-API-KEY: ${{ secrets.PROD_TYPESENSE_API_KEY }}" \
             http://localhost:8108/collections/ossfinder; then
-            echo "Initializing Typesense collection..."
             docker compose -f docker-compose.prod.yml exec backend \
               ./init-typesense.sh || echo "Collection initialization completed"
           fi
 
-          # Start backend with extended health check
+          # Start backend with health check
           docker compose -f docker-compose.prod.yml up -d --build backend
-
-          # Wait for backend to be healthy
           for i in {1..20}; do
             if docker compose -f docker-compose.prod.yml exec backend \
               curl -sf http://localhost:${{ secrets.PROD_BACKEND_PORT }}/health; then
-              echo "Backend ready after $i attempts"
+              echo "Backend ready"
               break
             fi
             sleep 5
-            [ $i -eq 10 ] && docker compose -f docker-compose.prod.yml restart backend
-          fi
+          done
 
-          # Start remaining services
+          # Complete deployment
           docker compose -f docker-compose.prod.yml up -d --build
 
-          # =========================================
-          # PHASE 4: SSL SETUP
-          # =========================================
+          # SSL setup (non-sudo)
           if [ ! -d "data/certbot/conf/live/${{ secrets.PROD_DOMAIN }}" ]; then
-            ./init-letsencrypt.sh
+            docker compose -f docker-compose.prod.yml run --rm certbot certonly \
+              --webroot -w /var/www/certbot \
+              --email nina@tymyrddin.dev --agree-tos --non-interactive \
+              -d ${{ secrets.PROD_DOMAIN }} -d www.${{ secrets.PROD_DOMAIN }}
           else
             docker compose -f docker-compose.prod.yml run --rm certbot renew
           fi
 
-          # Final nginx reload and verification
+          # Final nginx reload
           docker compose -f docker-compose.prod.yml exec nginx nginx -s reload
-          sleep 3  # Give nginx time to reload
-          
-          # Verify nginx is running
-          if ! docker compose -f docker-compose.prod.yml ps | grep -q "nginx.*Up"; then
-            echo "Nginx failed to start, retrying..."
-            docker compose -f docker-compose.prod.yml restart nginx
-          fi
           EOT
         timeout-minutes: 30
 
       # ======================
       # STAGE 4: VERIFICATION
       # ======================
-      - name: Validate deployment
+      - name: Verify deployment
         run: |
           ssh -T -o StrictHostKeyChecking=no deploy@${{ secrets.HETZNER_SERVER_IP }} << 'EOT'
           cd ~/app
-          echo "=== Service Status ==="
+          echo "=== Container Status ==="
           docker compose -f docker-compose.prod.yml ps -a
-          echo "\n=== Backend Health ==="
-          curl -sf http://localhost:${{ secrets.PROD_BACKEND_PORT }}/health || echo "Backend health check failed"
-          echo "\n=== HTTPS Check ==="
+          echo "\n=== HTTPS Test ==="
           curl -Isk https://${{ secrets.PROD_DOMAIN }} | grep -E 'HTTP|Location'
-          echo "\n=== Typesense Collection ==="
-          curl -sf -H "X-TYPESENSE-API-KEY: ${{ secrets.PROD_TYPESENSE_API_KEY }}" \
-            http://localhost:8108/collections/ossfinder || echo "Typesense collection check failed"
           EOT
