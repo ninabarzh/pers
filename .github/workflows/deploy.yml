@@ -21,28 +21,47 @@ jobs:
 
       - name: Transfer files to server
         run: |
-          # First clean up problematic directories on server
+          # 1. Prepare server for transfer
           ssh -o StrictHostKeyChecking=no deploy@${{ secrets.HETZNER_SERVER_IP }} << 'EOF'
           set -e
           cd /home/deploy/app
           
-          # Reset permissions for rsync cleanup
-          sudo chown -R deploy:docker app_data/certbot || true
-          sudo chmod -R 775 app_data/certbot || true
+          # Backup existing SSL certs
+          sudo tar -czf /tmp/certbot_backup.tar.gz app_data/certbot/conf/live/ 2>/dev/null || true
           
-          # Remove only what rsync needs to replace
-          sudo rm -rf app_data/certbot/www/.well-known || true
-          EOF
+          # Set permissive permissions temporarily
+          sudo chown -R deploy:docker app_data/ || true
+          sudo chmod -R 775 app_data/ || true
+          EOT
           
-          # Then run original working rsync command
-          rsync -avz --delete \
+          # 2. Run rsync with careful exclusions
+          rsync -rlptDzv \
+            --delete \
             --exclude='.git' \
             --exclude='.github' \
             --exclude='.env*' \
             --exclude='node_modules' \
+            --exclude='app_data/certbot/conf/live/' \
             -e "ssh -o StrictHostKeyChecking=no" \
             "$GITHUB_WORKSPACE/" \
             "deploy@${{ secrets.HETZNER_SERVER_IP }}:/home/deploy/app/"
+          
+          # 3. Restore server state
+          ssh -o StrictHostKeyChecking=no deploy@${{ secrets.HETZNER_SERVER_IP }} << 'EOF'
+          set -e
+          cd /home/deploy/app
+          
+          # Restore SSL certs if they existed
+          sudo tar -xzf /tmp/certbot_backup.tar.gz -C ./ 2>/dev/null || true
+          sudo rm -f /tmp/certbot_backup.tar.gz
+          
+          # Restore secure permissions
+          sudo chown -R root:docker app_data/certbot/conf/
+          sudo chmod -R 750 app_data/certbot/conf/
+          
+          # Verify transfer
+          ls -la docker-compose.prod.yml nginx/nginx.prod.conf
+          EOT
 
       - name: Create and secure .env file
         run: |
