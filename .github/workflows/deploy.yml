@@ -22,7 +22,7 @@ jobs:
       - name: Transfer files to server
         run: |
           # 1. Prepare server for transfer
-          ssh -o StrictHostKeyChecking=no deploy@${{ secrets.HETZNER_SERVER_IP }} << 'EOF'
+          ssh -o StrictHostKeyChecking=no deploy@${{ secrets.HETZNER_SERVER_IP }} << 'EOT'
           set -e
           cd /home/deploy/app
           
@@ -47,7 +47,7 @@ jobs:
             "deploy@${{ secrets.HETZNER_SERVER_IP }}:/home/deploy/app/"
           
           # 3. Restore server state
-          ssh -o StrictHostKeyChecking=no deploy@${{ secrets.HETZNER_SERVER_IP }} << 'EOF'
+          ssh -o StrictHostKeyChecking=no deploy@${{ secrets.HETZNER_SERVER_IP }} << 'EOT'
           set -e
           cd /home/deploy/app
           
