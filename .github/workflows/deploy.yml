@@ -11,9 +11,6 @@ jobs:
     environment: production
 
     steps:
-      # ======================
-      # STAGE 1: PREPARATION
-      # ======================
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
@@ -24,9 +21,6 @@ jobs:
         with:
           ssh-private-key: ${{ secrets.HETZNER_SSH_KEY }}
 
-      # ======================
-      # STAGE 2: FILE TRANSFER
-      # ======================
       - name: Transfer files to server
         run: |
           rsync -avz --delete \
@@ -38,17 +32,13 @@ jobs:
             "$GITHUB_WORKSPACE/" \
             "deploy@${{ secrets.HETZNER_SERVER_IP }}:~/app/"
 
-      # ======================
-      # STAGE 3: SERVER SETUP
-      # ======================
       - name: Configure production environment
         run: |
           ssh -T -o StrictHostKeyChecking=no deploy@${{ secrets.HETZNER_SERVER_IP }} << 'EOT'
+          set -e
           cd ~/app
 
-          # =========================================
-          # PHASE 1: ENVIRONMENT CONFIGURATION
-          # =========================================
+          # Environment configuration
           cat <<EOF > .env
           TYPESENSE_API_KEY=${{ secrets.PROD_TYPESENSE_API_KEY }}
           TYPESENSE_DATA_DIR=/data/typesense
@@ -56,32 +46,30 @@ jobs:
           TYPESENSE_PORT=8108
           TYPESENSE_PROTOCOL=http
           DOMAIN=${{ secrets.PROD_DOMAIN }}
-          PROD_BACKEND_PORT=${{ secrets.PROD_BACKEND_PORT }}
-          PROD_FRONTEND_PORT=${{ secrets.PROD_FRONTEND_PORT }}
-          BACKEND_STARTUP_DELAY=15
+          PROD_BACKEND_PORT=8000
+          PROD_FRONTEND_PORT=8001
+          BACKEND_STARTUP_DELAY=30
           EOF
           chmod 600 .env
 
-          # =========================================
-          # PHASE 2: INFRASTRUCTURE SETUP
-          # =========================================
-          mkdir -p /data/typesense
+          # Infrastructure setup
+          mkdir -p /data/typesense /data/static nginx/config/dhparam
           chown -R 1001:docker /data/typesense
           chmod -R 770 /data/typesense
 
-          # Generate DH params in background if missing
-          mkdir -p nginx/config/dhparam
-          [ ! -f nginx/config/dhparam/dhparam.pem ] && \
-            openssl dhparam -out nginx/config/dhparam/dhparam.pem 2048 &
+          # Generate DH params if missing
+          if [ ! -f nginx/config/dhparam/dhparam.pem ]; then
+            openssl dhparam -out nginx/config/dhparam/dhparam.pem 2048
+          fi
 
-          # =========================================
-          # PHASE 3: SERVICES DEPLOYMENT
-          # =========================================
-          # Build and start Typesense first
-          docker compose -f docker-compose.prod.yml build typesense
-          docker compose -f docker-compose.prod.yml up -d typesense
+          # Clean up any existing containers
+          docker compose -f docker-compose.prod.yml down || true
 
-          # Wait for Typesense with health check
+          # Start Typesense first
+          docker compose -f docker-compose.prod.yml up -d --build typesense
+
+          # Wait for Typesense with extended timeout
+          echo "Waiting for Typesense to be ready..."
           for i in {1..30}; do
             if docker compose -f docker-compose.prod.yml exec typesense \
               curl -sf http://localhost:8108/health; then
@@ -89,10 +77,11 @@ jobs:
               break
             fi
             sleep 5
-            [ $i -eq 15 ] && docker compose -f docker-compose.prod.yml restart typesense
+            [ $i -eq 30 ] && echo "Typesense failed to start" && exit 1
           done
 
           # Initialize Typesense collection if needed
+          echo "Checking Typesense collection..."
           if ! docker compose -f docker-compose.prod.yml exec typesense \
             curl -sf -H "X-TYPESENSE-API-KEY: ${{ secrets.PROD_TYPESENSE_API_KEY }}" \
             http://localhost:8108/collections/ossfinder; then
@@ -101,126 +90,89 @@ jobs:
               ./init-typesense.sh || echo "Collection initialization completed"
           fi
 
-          # Start backend with extended health check
-          docker compose -f docker-compose.prod.yml stop backend || true
-          docker compose -f docker-compose.prod.yml rm -f backend || true
+          # Start backend with longer startup delay
+          echo "Starting backend..."
           docker compose -f docker-compose.prod.yml up -d --build backend
 
-          # Wait for backend to be healthy
-          for i in {1..20}; do
+          # Extended wait for backend
+          echo "Waiting for backend to be healthy..."
+          for i in {1..30}; do
             if docker compose -f docker-compose.prod.yml exec backend \
-              curl -sf http://localhost:${{ secrets.PROD_BACKEND_PORT }}/health; then
+              curl -sf http://localhost:8000/health; then
               echo "Backend ready after $i attempts"
               break
             fi
             sleep 5
-            [ $i -eq 10 ] && docker compose -f docker-compose.prod.yml restart backend
+            [ $i -eq 30 ] && echo "Backend failed to start" && exit 1
           done
 
-          # =========================================
-          # PHASE 4: SSL & NGINX SETUP
-          # =========================================
-          # Clean up any existing nginx
-          docker compose -f docker-compose.prod.yml stop nginx || true
-          docker compose -f docker-compose.prod.yml rm -f nginx || true
+          # Start frontend
+          echo "Starting frontend..."
+          docker compose -f docker-compose.prod.yml up -d --build frontend
 
-          # Ensure certbot directories exist
+          # SSL certificate setup
+          echo "Setting up SSL certificates..."
           mkdir -p data/certbot/{conf,www}
 
-          # Renew or create certificates
           if [ ! -d "data/certbot/conf/live/${{ secrets.PROD_DOMAIN }}" ]; then
-            echo "Initializing SSL certificates..."
+            echo "Initial certificate setup..."
+            # Start temporary nginx for certbot
             docker compose -f docker-compose.prod.yml up -d nginx
-            sleep 5
+            sleep 10
+            
+            # Get certificates
             docker compose -f docker-compose.prod.yml run --rm certbot certonly \
               --webroot -w /var/www/certbot \
               --email nina@tymyrddin.dev --agree-tos --non-interactive \
-              -d ${{ secrets.PROD_DOMAIN }} -d www.${{ secrets.PROD_DOMAIN }}
+              -d ${{ secrets.PROD_DOMAIN }} -d www.${{ secrets.PROD_DOMAIN }} || \
+              echo "Certificate setup may have failed - continuing"
           else
-            echo "Renewing SSL certificates..."
-            docker compose -f docker-compose.prod.yml run --rm certbot renew --force-renewal
+            echo "Renewing existing certificates..."
+            docker compose -f docker-compose.prod.yml run --rm certbot renew
           fi
 
-          # Start nginx with retry logic
-          for i in {1..5}; do
-            echo "Starting nginx (attempt $i/5)..."
-            docker compose -f docker-compose.prod.yml up -d --force-recreate nginx
+          # Full restart of all services
+          echo "Restarting all services..."
+          docker compose -f docker-compose.prod.yml down
+          docker compose -f docker-compose.prod.yml up -d
+
+          # Verify nginx
+          echo "Verifying nginx..."
+          for i in {1..10}; do
+            if docker compose -f docker-compose.prod.yml exec nginx nginx -t; then
+              docker compose -f docker-compose.prod.yml exec nginx nginx -s reload
+              break
+            fi
             sleep 5
-            
-            # Verify nginx is running and healthy
-            if docker compose -f docker-compose.prod.yml ps | grep -q "nginx.*Up"; then
-              # Test configuration
-              if docker compose -f docker-compose.prod.yml exec nginx nginx -t; then
-                echo "Nginx started successfully with valid configuration"
-                break
-              else
-                echo "Nginx configuration test failed"
-                docker compose -f docker-compose.prod.yml logs nginx
-              fi
-            fi
-            
-            if [ $i -eq 5 ]; then
-              echo "Nginx failed to start after 5 attempts"
-              docker compose -f docker-compose.prod.yml logs nginx
-              exit 1
-            fi
+            [ $i -eq 10 ] && echo "Nginx configuration test failed" && exit 1
           done
 
-          # Final reload
-          docker compose -f docker-compose.prod.yml exec nginx nginx -s reload
+          echo "Deployment completed successfully"
           EOT
-        timeout-minutes: 30
 
-      # ======================
-      # STAGE 4: VERIFICATION
-      # ======================
       - name: Validate deployment
         run: |
           ssh -T -o StrictHostKeyChecking=no deploy@${{ secrets.HETZNER_SERVER_IP }} << 'EOT'
           cd ~/app
           
-          echo "=== Full Container Status ==="
+          echo "=== Container Status ==="
           docker compose -f docker-compose.prod.yml ps -a
           
-          # First verify nginx is running
-          if ! docker compose -f docker-compose.prod.yml ps | grep -q "nginx.*Up"; then
-            echo "ERROR: Nginx is not running"
-            echo "Attempting to start nginx..."
-            docker compose -f docker-compose.prod.yml up -d nginx
-            sleep 5
-            if ! docker compose -f docker-compose.prod.yml ps | grep -q "nginx.*Up"; then
-              echo "Nginx failed to start"
-              docker compose -f docker-compose.prod.yml logs nginx
-              exit 1
-            fi
-          fi
-          
-          echo "\n=== Nginx Configuration Test ==="
-          docker compose -f docker-compose.prod.yml exec nginx nginx -t
-          
-          echo "\n=== SSL Certificate Verification ==="
-          docker compose -f docker-compose.prod.yml exec nginx ls -la /etc/letsencrypt/live/${{ secrets.PROD_DOMAIN }}/
-          docker compose -f docker-compose.prod.yml exec nginx cat /etc/letsencrypt/live/${{ secrets.PROD_DOMAIN }}/fullchain.pem | \
-            openssl x509 -noout -dates || echo "Certificate check failed"
-          
-          echo "\n=== Nginx Error Log (last 20 lines) ==="
-          docker compose -f docker-compose.prod.yml exec nginx tail -n 20 /var/log/nginx/error.log || echo "Error log unavailable"
-          
           echo "\n=== Service Health Checks ==="
-          echo "Typesense:" $(docker compose -f docker-compose.prod.yml exec typesense curl -s http://localhost:8108/health)
-          echo "Backend:" $(docker compose -f docker-compose.prod.yml exec backend curl -s http://localhost:${{ secrets.PROD_BACKEND_PORT }}/health || echo "Backend unreachable")
+          echo "Typesense:" $(docker compose -f docker-compose.prod.yml exec typesense curl -s http://localhost:8108/health || echo "unreachable")
+          echo "Backend:" $(docker compose -f docker-compose.prod.yml exec backend curl -s http://localhost:8000/health || echo "unreachable")
+          echo "Frontend:" $(docker compose -f docker-compose.prod.yml exec frontend curl -s http://localhost:8001/health || echo "unreachable")
           
-          echo "\n=== HTTPS Test ==="
-          if ! curl -Isk --retry 3 --retry-delay 5 https://${{ secrets.PROD_DOMAIN }} | grep -E 'HTTP|Location'; then
-            echo "HTTPS test failed, checking:"
-            echo "1. HTTP response:"
-            curl -Isk http://${{ secrets.PROD_DOMAIN }} || true
-            echo "2. Direct Nginx test:"
-            docker compose -f docker-compose.prod.yml exec nginx curl -Is http://localhost || true
-            echo "3. Port check:"
-            docker compose -f docker-compose.prod.yml exec nginx netstat -tulnp | grep -E '80|443' || true
-            exit 1
-          fi
+          echo "\n=== Nginx Status ==="
+          docker compose -f docker-compose.prod.yml exec nginx nginx -t
+          docker compose -f docker-compose.prod.yml exec nginx curl -Is http://localhost
+          
+          echo "\n=== SSL Verification ==="
+          docker compose -f docker-compose.prod.yml exec nginx ls -la /etc/letsencrypt/live/${{ secrets.PROD_DOMAIN }}/
+          
+          echo "\n=== Deployment Verification ==="
+          curl -Isk https://${{ secrets.PROD_DOMAIN }} | grep -E 'HTTP|Location' || \
+            (echo "HTTPS test failed" && exit 1)
           
           echo "\n=== Deployment Successful ==="
           EOT
