@@ -42,8 +42,8 @@ jobs:
         run: |
           ssh -T -o StrictHostKeyChecking=no deploy@${{ secrets.HETZNER_SERVER_IP }} << 'EOT'
           cd ~/app
-          
-          # Create production .env without sudo
+
+          # Create .env with ALL required variables
           cat <<EOF > .env
           TYPESENSE_API_KEY=${{ secrets.PROD_TYPESENSE_API_KEY }}
           TYPESENSE_DATA_DIR=/data/typesense
@@ -57,61 +57,34 @@ jobs:
           EOF
           chmod 600 .env
 
-          # Create data directory with docker group permissions
-          mkdir -p /data/typesense
-          chown -R 1001:docker /data/typesense
-          chmod -R 770 /data/typesense
+          # Ensure backend container gets the environment
+          docker compose -f docker-compose.prod.yml stop backend || true
+          docker compose -f docker-compose.prod.yml rm -f backend || true
 
-          # Build and start Typesense first
-          docker compose -f docker-compose.prod.yml build typesense
-          docker compose -f docker-compose.prod.yml up -d typesense
+          # Rebuild with proper environment
+          docker compose -f docker-compose.prod.yml build backend
+          docker compose -f docker-compose.prod.yml up -d backend
 
-          # Wait for Typesense with health check
-          for i in {1..30}; do
-            if docker compose -f docker-compose.prod.yml exec typesense \
-              curl -sf http://localhost:8108/health; then
-              echo "Typesense ready!"
-              break
-            fi
-            sleep 5
-          done
-
-          # Initialize collection if needed
-          if ! docker compose -f docker-compose.prod.yml exec typesense \
+          # Verify backend can access Typesense
+          if ! docker compose -f docker-compose.prod.yml exec backend \
             curl -sf -H "X-TYPESENSE-API-KEY: ${{ secrets.PROD_TYPESENSE_API_KEY }}" \
-            http://localhost:8108/collections/ossfinder; then
-            docker compose -f docker-compose.prod.yml exec backend \
-              ./init-typesense.sh || echo "Collection initialization completed"
+            http://typesense:8108/health; then
+            echo "Backend cannot connect to Typesense"
+            exit 1
           fi
 
-          # Start backend with health check
-          docker compose -f docker-compose.prod.yml up -d --build backend
-          for i in {1..20}; do
-            if docker compose -f docker-compose.prod.yml exec backend \
-              curl -sf http://localhost:${{ secrets.PROD_BACKEND_PORT }}/health; then
-              echo "Backend ready"
-              break
-            fi
-            sleep 5
-          done
+          # Force SSL certificate renewal if connection fails
+          docker compose -f docker-compose.prod.yml stop nginx || true
+          docker compose -f docker-compose.prod.yml run --rm certbot renew --force-renewal
+          docker compose -f docker-compose.prod.yml up -d nginx
 
-          # Complete deployment
-          docker compose -f docker-compose.prod.yml up -d --build
-
-          # SSL setup (non-sudo)
-          if [ ! -d "data/certbot/conf/live/${{ secrets.PROD_DOMAIN }}" ]; then
-            docker compose -f docker-compose.prod.yml run --rm certbot certonly \
-              --webroot -w /var/www/certbot \
-              --email nina@tymyrddin.dev --agree-tos --non-interactive \
-              -d ${{ secrets.PROD_DOMAIN }} -d www.${{ secrets.PROD_DOMAIN }}
-          else
-            docker compose -f docker-compose.prod.yml run --rm certbot renew
+          # Verify SSL certificate
+          if ! docker compose -f docker-compose.prod.yml exec nginx \
+            test -f /etc/letsencrypt/live/${{ secrets.PROD_DOMAIN }}/fullchain.pem; then
+            echo "SSL certificate missing, initializing..."
+            ./init-letsencrypt.sh
           fi
-
-          # Final nginx reload
-          docker compose -f docker-compose.prod.yml exec nginx nginx -s reload
           EOT
-        timeout-minutes: 30
 
       # ======================
       # STAGE 4: VERIFICATION
@@ -121,35 +94,16 @@ jobs:
           ssh -T -o StrictHostKeyChecking=no deploy@${{ secrets.HETZNER_SERVER_IP }} << 'EOT'
           cd ~/app
           
-          echo "=== Full Container Status ==="
-          docker compose -f docker-compose.prod.yml ps -a
+          echo "=== SSL Certificate Check ==="
+          docker compose -f docker-compose.prod.yml exec nginx ls -la /etc/letsencrypt/live/${{ secrets.PROD_DOMAIN }}/
           
-          echo "\n=== Container Logs ==="
-          echo "---- Backend ----"
-          docker compose -f docker-compose.prod.yml logs backend --tail=50 || true
-          echo "---- Frontend ----"
-          docker compose -f docker-compose.prod.yml logs frontend --tail=50 || true
-          echo "---- Nginx ----"
-          docker compose -f docker-compose.prod.yml logs nginx --tail=50 || true
+          echo "\n=== Nginx SSL Configuration ==="
+          docker compose -f docker-compose.prod.yml exec nginx nginx -T | grep ssl_certificate
           
-          echo "\n=== Network Connectivity ==="
-          echo "Backend to Typesense:"
-          docker compose -f docker-compose.prod.yml exec backend curl -v http://typesense:8108/health || true
-          
-          echo "\n=== Port Checks ==="
-          echo "Backend port (${{ secrets.PROD_BACKEND_PORT }}):"
-          docker compose -f docker-compose.prod.yml exec backend netstat -tulnp | grep ${{ secrets.PROD_BACKEND_PORT }} || true
-          
-          echo "\n=== HTTPS Test ==="
-          if ! curl -Isk https://${{ secrets.PROD_DOMAIN }} | grep -E 'HTTP|Location'; then
-            echo "HTTPS test failed, trying HTTP:"
-            curl -Isk http://${{ secrets.PROD_DOMAIN }} | grep -E 'HTTP|Location' || true
-            echo "Nginx direct test:"
-            docker compose -f docker-compose.prod.yml exec nginx curl -Is http://localhost || true
+          echo "\n=== Final HTTPS Test ==="
+          curl -Isk --retry 3 --retry-delay 5 https://${{ secrets.PROD_DOMAIN }} | grep -E 'HTTP|Location' || {
+            echo "HTTPS failed, checking HTTP:"
+            curl -Is http://${{ secrets.PROD_DOMAIN }}
             exit 1
-          fi
-          
-          echo "\n=== Final Health Checks ==="
-          echo "Typesense:" $(docker compose -f docker-compose.prod.yml exec typesense curl -s http://localhost:8108/health)
-          echo "Backend:" $(docker compose -f docker-compose.prod.yml exec backend curl -s http://localhost:${{ secrets.PROD_BACKEND_PORT }}/health)
+          }
           EOT
