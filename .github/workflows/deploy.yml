@@ -38,10 +38,15 @@ jobs:
           set -e
           cd ~/app
 
+          # Create directories with proper permissions in user's home directory
+          mkdir -p ~/app_data/typesense ~/app_data/static nginx/config/dhparam
+          chmod -R 775 ~/app_data
+
           # Environment configuration
           cat <<EOF > .env
           TYPESENSE_API_KEY=${{ secrets.PROD_TYPESENSE_API_KEY }}
-          TYPESENSE_DATA_DIR=/data/typesense
+          TYPESENSE_DATA_DIR=~/app_data/typesense
+          STATIC_VOLUME_PATH=~/app_data/static
           TYPESENSE_HOST=typesense
           TYPESENSE_PORT=8108
           TYPESENSE_PROTOCOL=http
@@ -51,11 +56,6 @@ jobs:
           BACKEND_STARTUP_DELAY=30
           EOF
           chmod 600 .env
-
-          # Infrastructure setup
-          mkdir -p /data/typesense /data/static nginx/config/dhparam
-          chown -R 1001:docker /data/typesense
-          chmod -R 770 /data/typesense
 
           # Generate DH params if missing
           if [ ! -f nginx/config/dhparam/dhparam.pem ]; then
@@ -112,9 +112,9 @@ jobs:
 
           # SSL certificate setup
           echo "Setting up SSL certificates..."
-          mkdir -p data/certbot/{conf,www}
+          mkdir -p certbot/{conf,www}
 
-          if [ ! -d "data/certbot/conf/live/${{ secrets.PROD_DOMAIN }}" ]; then
+          if [ ! -d "certbot/conf/live/${{ secrets.PROD_DOMAIN }}" ]; then
             echo "Initial certificate setup..."
             # Start temporary nginx for certbot
             docker compose -f docker-compose.prod.yml up -d nginx
