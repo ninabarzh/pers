@@ -8,13 +8,17 @@ services:
       - TYPESENSE_API_KEY=${TYPESENSE_API_KEY}
       - TYPESENSE_DATA_DIR=/data
       - GOTRACEBACK=all # For better debugging
+      - TYPESENSE_STARTUP_WAIT_SECONDS=30
     command: >
-      sh -c "mkdir -p /data && 
-      /usr/bin/typesense-server 
-      --data-dir=$${TYPESENSE_DATA_DIR} 
-      --api-key=$${TYPESENSE_API_KEY} 
-      --listen-port=8108 
-      --enable-cors"
+      sh -c "mkdir -p $${TYPESENSE_DATA_DIR} &&
+      echo 'Starting Typesense server...' &&
+      /usr/bin/typesense-server
+      --data-dir=$${TYPESENSE_DATA_DIR}
+      --api-key=$${TYPESENSE_API_KEY}
+      --listen-port=8108
+      --enable-cors
+      --max-memory-ratio=0.8
+      --snapshot-interval=120"
     volumes:
         - typesense_data:/data
     deploy:
