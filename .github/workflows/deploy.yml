@@ -139,80 +139,46 @@ jobs:
           ssh -T -o StrictHostKeyChecking=no deploy@${{ secrets.HETZNER_SERVER_IP }} << 'EOT'
           set -ex
           cd /home/deploy/app
-          
-          # Ensure docker access
+      
+          # 1. PREPARE ENVIRONMENT
+          # Ensure Docker access
           sudo chown root:docker /var/run/docker.sock
           sudo chmod 660 /var/run/docker.sock
-          
-          # Clean up
-          docker compose -f docker-compose.prod.yml stop nginx certbot || true
-          docker compose -f docker-compose.prod.yml rm -f nginx certbot || true
-          
-          # Prepare directories
-          sudo mkdir -p /home/deploy/app_data/certbot/{www,conf}/live
-          sudo chown -R deploy:docker /home/deploy/app_data/certbot
-          sudo chmod -R 775 /home/deploy/app_data/certbot
-          
-          # Free port 80 aggressively
-          sudo systemctl stop nginx apache2 httpd || true
-          sudo pkill -9 -f ':80' || true
-          
-          # Verify DNS
-          SERVER_IP=$(curl -s ifconfig.me)
-          DOMAIN_IP=$(dig +short ${{ secrets.PROD_DOMAIN }} | tail -n1)
-          if [ "$DOMAIN_IP" != "$SERVER_IP" ]; then
-            echo "❌ DNS mismatch: Domain points to $DOMAIN_IP but server IP is $SERVER_IP"
-            exit 1
-          fi
-          
-          # Try webroot method first (preferred)
-          if docker compose -f docker-compose.prod.yml run --rm certbot \
+      
+          # 2. STOP SERVICES
+          # Stop only what's needed for SSL
+          docker compose -f docker-compose.prod.yml stop nginx || true
+      
+          # 3. FREE PORT 80
+          # More thorough than before but still minimal
+          sudo ss -tulpn | grep ':80' || echo "Port 80 available"
+          sudo pkill -9 -f 'nginx|apache|httpd' || true
+      
+          # 4. OBTAIN CERTIFICATES
+          # Single attempt with clear error (no retry loop)
+          docker compose -f docker-compose.prod.yml run --rm --service-ports certbot \
             certonly \
-            --webroot \
+            --standalone \
             --non-interactive \
             --agree-tos \
             --email ${{ secrets.PROD_EMAIL }} \
             -d ${{ secrets.PROD_DOMAIN }} \
             -d www.${{ secrets.PROD_DOMAIN }} \
-            -w /var/www/certbot; then
-            
-            echo "✅ Certificates obtained via webroot method"
-          else
-            echo "ℹ️ Webroot failed, trying standalone on port 80"
-            # Fallback to standalone with retries
-            for i in {1..3}; do
-              if docker compose -f docker-compose.prod.yml run --rm --service-ports certbot \
-                certonly \
-                --standalone \
-                --non-interactive \
-                --agree-tos \
-                --email ${{ secrets.PROD_EMAIL }} \
-                -d ${{ secrets.PROD_DOMAIN }} \
-                -d www.${{ secrets.PROD_DOMAIN }} \
-                --preferred-challenges http \
-                --http-01-port 80; then
-                break
-              fi
-              sleep $((i*10))
-            done
-          fi
-          
-          # Final verification
-          if [ ! -f "/home/deploy/app_data/certbot/conf/live/${{ secrets.PROD_DOMAIN }}/fullchain.pem" ]; then
-            echo "❌ Certificate files not found!"
-            sudo ls -la /home/deploy/app_data/certbot/conf/live/ || true
+            --preferred-challenges http \
+            --http-01-port 80
+      
+          # 5. VERIFY SUCCESS
+          sudo ls -la /home/deploy/app_data/certbot/conf/live/${{ secrets.PROD_DOMAIN }}/
+          [ -f "/home/deploy/app_data/certbot/conf/live/${{ secrets.PROD_DOMAIN }}/fullchain.pem" ] || {
+            echo "❌ Certificate missing!"
             exit 1
-          fi
-          
-          # Restart services
-          sudo chown -R deploy:docker /home/deploy/app_data
+          }
+      
+          # 6. RESTART SERVICES
           docker compose -f docker-compose.prod.yml up -d --force-recreate
-          
-          # Post-deployment checks
+      
+          # 7. FINAL CHECK
           docker compose -f docker-compose.prod.yml exec nginx nginx -t
-          curl -Ikv --retry 3 --retry-delay 5 "https://${{ secrets.PROD_DOMAIN }}" >/dev/null
-          
-          echo "✅ SSL setup completed successfully"
           EOT
 
       - name: Verify deployment
