@@ -21,17 +21,17 @@ jobs:
 
       - name: Transfer files to server
         run: |
-          # 1. Prepare server for transfer
+          # 1. Prepare server for transfer (using passwordless sudo)
           ssh -o StrictHostKeyChecking=no deploy@${{ secrets.HETZNER_SERVER_IP }} << 'EOT'
           set -e
           cd /home/deploy/app
           
-          # Backup existing SSL certs
-          sudo tar -czf /tmp/certbot_backup.tar.gz app_data/certbot/conf/live/ 2>/dev/null || true
+          # Backup existing SSL certs (no password prompt)
+          sudo -n tar -czf /tmp/certbot_backup.tar.gz app_data/certbot/conf/live/ 2>/dev/null || true
           
           # Set permissive permissions temporarily
-          sudo chown -R deploy:docker app_data/ || true
-          sudo chmod -R 775 app_data/ || true
+          sudo -n chown -R deploy:docker app_data/ || true
+          sudo -n chmod -R 775 app_data/ || true
           EOT
           
           # 2. Run rsync with careful exclusions
@@ -46,18 +46,18 @@ jobs:
             "$GITHUB_WORKSPACE/" \
             "deploy@${{ secrets.HETZNER_SERVER_IP }}:/home/deploy/app/"
           
-          # 3. Restore server state
+          # 3. Restore server state (using passwordless sudo)
           ssh -o StrictHostKeyChecking=no deploy@${{ secrets.HETZNER_SERVER_IP }} << 'EOT'
           set -e
           cd /home/deploy/app
           
           # Restore SSL certs if they existed
-          sudo tar -xzf /tmp/certbot_backup.tar.gz -C ./ 2>/dev/null || true
-          sudo rm -f /tmp/certbot_backup.tar.gz
+          sudo -n tar -xzf /tmp/certbot_backup.tar.gz -C ./ 2>/dev/null || true
+          sudo -n rm -f /tmp/certbot_backup.tar.gz
           
           # Restore secure permissions
-          sudo chown -R root:docker app_data/certbot/conf/
-          sudo chmod -R 750 app_data/certbot/conf/
+          sudo -n chown -R root:docker app_data/certbot/conf/
+          sudo -n chmod -R 750 app_data/certbot/conf/
           
           # Verify transfer
           ls -la docker-compose.prod.yml nginx/nginx.prod.conf
