@@ -96,8 +96,15 @@ jobs:
           set -e
           cd /home/deploy/app
       
-          # Clean up old containers
-          docker compose -f docker-compose.prod.yml down -v || true
+          # Stop and clean up
+          docker compose -f docker-compose.prod.yml down -v
+          
+          # Set proper permissions
+          sudo chmod 644 /home/deploy/app/.env
+          sudo chown deploy:docker /home/deploy/app/.env
+          
+          # Rebuild and start
+          docker compose -f docker-compose.prod.yml up -d --build
       
           # Start core services first
           docker compose -f docker-compose.prod.yml up -d --build typesense backend

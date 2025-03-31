@@ -57,6 +57,7 @@ services:
     volumes:
       - /home/deploy/app/.env:/app/.env:ro  # Mount the env file
       - static_volume:/app/src/static # Mount static files
+    user: "myuser"
     deploy:
       resources:
         limits:
