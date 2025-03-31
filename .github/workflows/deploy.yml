@@ -27,15 +27,24 @@ jobs:
       # ======================
       # STAGE 2: FILE TRANSFER
       # ======================
-      - name: Sync code to server
+      - name: Transfer files to server
         run: |
+          # Verify source directory exists first
+          echo "Current directory contents:"
+          ls -la
+          
+          # Use absolute path for reliable transfer
+          SOURCE_DIR="$GITHUB_WORKSPACE"
+          echo "Syncing from: $SOURCE_DIR"
+          
           rsync -avz --delete \
             --exclude='.git' \
             --exclude='.github' \
-            --exclude='.env' \          # Never overwrite existing .env
+            --exclude='.env*' \
             --exclude='node_modules' \
             -e "ssh -o StrictHostKeyChecking=no" \
-            . deploy@${{ secrets.HETZNER_SERVER_IP }}:~/app/
+            "$SOURCE_DIR/" \  # Note the trailing slash
+            deploy@${{ secrets.HETZNER_SERVER_IP }}:~/app/
 
       # ======================
       # STAGE 3: SERVER SETUP
