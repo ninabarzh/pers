@@ -8,6 +8,7 @@ services:
       - TYPESENSE_API_KEY=${TYPESENSE_API_KEY}
       - TYPESENSE_DATA_DIR=/data
       - GOTRACEBACK=all # For better debugging
+      - TYPESENSE_TIMEOUT_SECONDS=30
     command: >
       sh -c "mkdir -p $${TYPESENSE_DATA_DIR} &&
       echo 'Starting Typesense server...' &&
@@ -52,6 +53,7 @@ services:
       - TYPESENSE_PORT=8108
       - TYPESENSE_PROTOCOL=http
       - STARTUP_DELAY=15
+      - TYPESENSE_TIMEOUT_SECONDS=30
     volumes:
       - /home/deploy/app/.env:/app/.env:ro  # Mount the env file
       - static_volume:/app/src/static # Mount static files
