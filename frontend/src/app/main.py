@@ -61,8 +61,9 @@ app = Starlette(
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(
-        "frontend.src.app.main:app",
+        "src.app.main:app",
         host="0.0.0.0",
-        port=config["PORT"],
-        reload=config["DEBUG"]
+        port=8000,
+        reload=False,
+        access_log = False
     )

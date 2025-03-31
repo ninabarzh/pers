@@ -59,13 +59,4 @@ USER myuser
 HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
     CMD curl -f http://localhost:8000/health || exit 1
 
-CMD ["sh", "-c", \
-    "echo \"Waiting ${STARTUP_DELAY}s for dependencies...\"; \
-    sleep ${STARTUP_DELAY}; \
-    python -c \"import os; \
-    assert os.getenv('TYPESENSE_API_KEY'), 'Typesense API key not configured'; \
-    assert os.getenv('TYPESENSE_HOST'), 'Typesense host not configured'; \
-    print('Typesense configuration validated'); \
-    from src.app.main import config; \
-    print('Starting with config:', config)\" && \
-    uvicorn src.app.main:app --host 0.0.0.0 --port 8000 --no-access-log"]
+CMD ["uvicorn", "src.app.main:app", "--host", "0.0.0.0", "--port", "8000", "--no-access-log"]
