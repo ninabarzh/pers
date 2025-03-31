@@ -21,11 +21,13 @@ class TypesenseClient:
     TYPESENSE_PORT: str
     TYPESENSE_PROTOCOL: str
 
+
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super().__new__(cls)
             cls._instance._initialized = False
         return cls._instance
+
 
     def __init__(self):
         if not self._initialized:
@@ -36,6 +38,7 @@ class TypesenseClient:
             except Exception as e:
                 logger.error(f"Typesense initialization failed: {str(e)}")
                 self.client = None
+
 
     def _initialize_config(self):
         """Load configuration from environment"""
@@ -55,8 +58,9 @@ class TypesenseClient:
         if not self.TYPESENSE_API_KEY:
             raise ValueError("TYPESENSE_API_KEY is required")
 
+
     def health(self):
-        """Standard health check interface using correct API endpoint"""
+        """Proper health check implementation for current Typesense API"""
         if not hasattr(self, 'client') or self.client is None:
             return {
                 "ok": False,
@@ -64,13 +68,12 @@ class TypesenseClient:
             }
 
         try:
-            # Use the correct health check endpoint
-            health_response = self.client.health.retrieve()
+            # Use the collections API as a health check
+            self.client.collections['ossfinder'].retrieve()
             return {
                 "ok": True,
                 "status": "operational",
-                "version": health_response.get("version", "unknown"),
-                "timestamp": health_response.get("timestamp", "")
+                "version": "unknown"  # Can't get version directly in current API
             }
         except Exception as e:
             return {
@@ -78,6 +81,7 @@ class TypesenseClient:
                 "error": str(e),
                 "status": "unavailable"
             }
+
 
     def _initialize_client(self):
         """Initialize the Typesense client with proper configuration"""
@@ -91,6 +95,7 @@ class TypesenseClient:
             }]
         })
         self.ensure_collection_exists()
+
 
     def _with_timeout(self, func, *args, **kwargs):
         """Wrapper to add timeout to operations"""
@@ -109,6 +114,7 @@ class TypesenseClient:
             f"Operation timed out after {self.TIMEOUT_SECONDS} seconds"
         ) from last_exception
 
+
     def ensure_collection_exists(self):
         """Ensure collection exists with timeout handling"""
         if not self.client:
@@ -119,6 +125,7 @@ class TypesenseClient:
         except Exception as e:
             logger.error(f"Collection verification failed: {str(e)}")
             return False
+
 
     def _ensure_collection(self):
         """Actual collection existence check"""
@@ -150,6 +157,7 @@ class TypesenseClient:
             self.client.collections.create(schema)
             logger.info(f"Created collection '{collection_name}'")
 
+
     def search(self, query: str) -> Dict:
         """Search with timeout handling"""
         return self._with_timeout(
@@ -161,9 +169,11 @@ class TypesenseClient:
             }
         )
 
+
     def index_data(self, data: List[Dict]) -> None:
         """Index data with timeout handling"""
         return self._with_timeout(self._index_data_impl, data)
+
 
     def _index_data_impl(self, data: List[Dict]) -> None:
         """Actual data indexing implementation"""
@@ -184,9 +194,11 @@ class TypesenseClient:
             except TypesenseClientError as e:
                 logger.error(f"Error indexing document {document.get('Id-repo', 'unknown')}: {e}")
 
+
     def document_exists(self, document_id: str) -> bool:
         """Check if document exists with timeout handling"""
         return self._with_timeout(self._document_exists_impl, document_id)
+
 
     def _document_exists_impl(self, document_id: str) -> bool:
         """Actual document existence check"""
@@ -195,6 +207,7 @@ class TypesenseClient:
             return True
         except ObjectNotFound:
             return False
+
 
 # Singleton instance
 client_instance = TypesenseClient()
