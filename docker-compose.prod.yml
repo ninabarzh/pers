@@ -61,15 +61,17 @@ services:
           memory: 512M
           cpus: '0.5'
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
+      test: ["CMD-SHELL", "nc -z localhost 8000 || exit 1"]
       interval: 10s
-      timeout: 3s
-      retries: 5  # Increased from 3
-      start_period: 30s  # Increased grace period
+      timeout: 5s
+      retries: 10  # Increased from 3
+      start_period: 60s  # Increased grace period
     command: >
       sh -c "echo 'Waiting $${STARTUP_DELAY}s for dependencies...';
       sleep $${STARTUP_DELAY};
-      uvicorn src.app.main:app --host 0.0.0.0 --port 8000 --no-access-log"
+      echo 'Starting Uvicorn...';
+      uvicorn src.app.main:app --host 0.0.0.0 --port 8000 --no-access-log;
+      echo 'Uvicorn exited with status $?'"
     depends_on:
       typesense:
         condition: service_healthy
