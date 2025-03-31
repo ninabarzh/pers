@@ -42,6 +42,7 @@ jobs:
           DOMAIN=${{ secrets.PROD_DOMAIN }}
           DEBUG=false
           ENV=production
+          EMAIL=${{ secrets.PROD_EMAIL }}
 
           # Typesense Configuration
           TYPESENSE_API_KEY=${{ secrets.PROD_TYPESENSE_API_KEY }}
@@ -72,12 +73,15 @@ jobs:
           # Create required directories
           sudo mkdir -p /home/deploy/app_data/{typesense,static,certbot}
           sudo mkdir -p /home/deploy/app/nginx/config/dhparam
+          sudo mkdir -p /data/static
 
           # Set ownership and permissions
           sudo chown -R deploy:docker /home/deploy/app_data
           sudo chmod -R 775 /home/deploy/app_data
           sudo chown -R deploy:docker /home/deploy/app/nginx
           sudo chmod -R 775 /home/deploy/app/nginx
+          sudo chown -R deploy:docker /data/static
+          sudo chmod -R 775 /data/static
 
           # Generate DH params if missing
           if [ ! -f "/home/deploy/app/nginx/config/dhparam/dhparam.pem" ]; then
@@ -86,7 +90,7 @@ jobs:
           fi
           EOT
 
-      - name: Run deployment
+      - name: Initial deployment without certbot
         run: |
           ssh -T -o StrictHostKeyChecking=no deploy@${{ secrets.HETZNER_SERVER_IP }} << 'EOT'
           set -e
@@ -95,11 +99,38 @@ jobs:
           # Clean up old containers
           docker compose -f docker-compose.prod.yml down -v || true
 
-          # Build and start services
-          docker compose -f docker-compose.prod.yml up -d --build
+          # Start services without certbot
+          docker compose -f docker-compose.prod.yml up -d --build nginx typesense backend frontend
 
-          # Verify services are healthy
-          docker compose -f docker-compose.prod.yml ps
+          # Wait for backend to be healthy
+          echo "Waiting for backend to become healthy..."
+          for i in {1..30}; do
+            if docker compose -f docker-compose.prod.yml exec backend curl -sf http://localhost:8000/health; then
+              echo "Backend is healthy"
+              break
+            fi
+            sleep 5
+            echo "Attempt $i: Backend not ready yet..."
+          done
+          EOT
+
+      - name: Set up SSL certificates
+        run: |
+          ssh -T -o StrictHostKeyChecking=no deploy@${{ secrets.HETZNER_SERVER_IP }} << 'EOT'
+          set -e
+          cd /home/deploy/app
+
+          # Stop nginx temporarily
+          docker compose -f docker-compose.prod.yml stop nginx
+
+          # Get SSL certificates
+          docker compose -f docker-compose.prod.yml run --rm certbot certonly \
+            --webroot --webroot-path /var/www/certbot \
+            --email $EMAIL --agree-tos --no-eff-email \
+            -d $DOMAIN -d www.$DOMAIN --force-renewal
+
+          # Start all services
+          docker compose -f docker-compose.prod.yml up -d
           EOT
 
       - name: Verify deployment

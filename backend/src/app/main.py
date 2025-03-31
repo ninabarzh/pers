@@ -50,9 +50,9 @@ try:
 except Exception as e:
     logger.error(f"Failed to create static directory: {e}")
 
-# Application endpoints
 async def health_check(request):
-    return JSONResponse({"status": "healthy"})
+    """Simple health check endpoint"""
+    return JSONResponse({"status": "healthy"}, status_code=200)
 
 async def root(request):
     return JSONResponse({
