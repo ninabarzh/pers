@@ -28,53 +28,61 @@ class TypesenseClient:
                 logger.warning(f"No .env file found at {env_path}")
         return cls._instance
 
+
     def __init__(self):
         if not self._initialized:
-            self._initialize_client()
-            self._initialized = True
+            try:
+                self._initialize_client()
+                self._initialized = True
+            except Exception as e:
+                logger.error(f"Typesense initialization failed: {str(e)}")
+                self.client = None  # Mark as uninitialized but allow app to start
+
+
+    def health(self):
+        """Standard health check interface"""
+        if not hasattr(self, 'client') or self.client is None:
+            return {
+                "ok": False,
+                "error": "Client not initialized"
+            }
+
+        try:
+            metrics = self.client.operations.metrics.retrieve()
+            return {
+                "ok": metrics.get("ok", False),
+                "status": "operational",
+                "version": metrics.get("version", "unknown"),
+                "timestamp": metrics.get("timestamp", "")
+            }
+        except Exception as e:
+            return {
+                "ok": False,
+                "error": str(e),
+                "status": "unavailable"
+            }
+
 
     def _initialize_client(self):
-        """Initialize Typesense client with proper environment variable handling"""
-        is_production = os.getenv('ENV', 'development').lower() == 'production'
-
-        # Use PROD_ variables in production, otherwise fall back to non-prefixed
-        self.TYPESENSE_API_KEY = (
-            os.getenv('PROD_TYPESENSE_API_KEY') if is_production
-            else os.getenv('TYPESENSE_API_KEY')
-        )
-
-        self.TYPESENSE_HOST = (
-            os.getenv('PROD_TYPESENSE_HOST') if is_production
-            else os.getenv('TYPESENSE_HOST', 'typesense')
-        )
-
-        self.TYPESENSE_PORT = (
-            os.getenv('PROD_TYPESENSE_PORT') if is_production
-            else os.getenv('TYPESENSE_PORT', '8108')
-        )
-
-        self.TYPESENSE_PROTOCOL = (
-            os.getenv('PROD_TYPESENSE_PROTOCOL') if is_production
-            else os.getenv('TYPESENSE_PROTOCOL', 'http')
-        )
-
-        # Timeout handling (in seconds)
+        """Simplified initialization that works with Docker env variables"""
+        self.TYPESENSE_API_KEY = os.getenv('TYPESENSE_API_KEY')
+        self.TYPESENSE_HOST = os.getenv('TYPESENSE_HOST', 'typesense')
+        self.TYPESENSE_PORT = os.getenv('TYPESENSE_PORT', '8108')
+        self.TYPESENSE_PROTOCOL = os.getenv('TYPESENSE_PROTOCOL', 'http')
         self.TIMEOUT_SECONDS = float(os.getenv('TYPESENSE_TIMEOUT_SECONDS', '30'))
 
         if not self.TYPESENSE_API_KEY:
-            env_type = "production" if is_production else "development"
-            raise ValueError(f"TYPESENSE_API_KEY is missing for {env_type} environment")
+            raise ValueError("TYPESENSE_API_KEY is required")
 
-        logger.info(f"Initializing Typesense client in {'production' if is_production else 'development'} mode with: "
-                    f"Host: {self.TYPESENSE_HOST}:{self.TYPESENSE_PORT}, "
-                    f"Protocol: {self.TYPESENSE_PROTOCOL}")
+        logger.info(f"Initializing Typesense client with: {self.TYPESENSE_HOST}:{self.TYPESENSE_PORT}")
 
         self.client = typesense.Client({
             'api_key': self.TYPESENSE_API_KEY,
             'nodes': [{
                 'host': self.TYPESENSE_HOST,
                 'port': self.TYPESENSE_PORT,
-                'protocol': self.TYPESENSE_PROTOCOL
+                'protocol': self.TYPESENSE_PROTOCOL,
+                'connection_timeout_seconds': self.TIMEOUT_SECONDS
             }]
         })
 
@@ -97,13 +105,19 @@ class TypesenseClient:
             f"Operation timed out after {self.TIMEOUT_SECONDS} seconds"
         ) from last_exception
 
+
     def ensure_collection_exists(self):
         """Ensure collection exists with timeout handling"""
+        """More resilient collection setup"""
+        if not self.client:
+            return False
+
         try:
-            self._with_timeout(self._ensure_collection)
+            return self._with_timeout(self._ensure_collection)
         except Exception as e:
-            logger.error(f"Failed to ensure collection exists: {str(e)}")
-            raise
+            logger.error(f"Collection verification failed: {str(e)}")
+            return False
+
 
     def _ensure_collection(self):
         """Actual collection existence check"""
@@ -135,6 +149,7 @@ class TypesenseClient:
             self.client.collections.create(schema)
             logger.info(f"Created collection '{collection_name}'")
 
+
     def search(self, query: str):
         """Search with timeout handling"""
         return self._with_timeout(
@@ -149,6 +164,7 @@ class TypesenseClient:
     def index_data(self, data: list):
         """Index data with timeout handling"""
         return self._with_timeout(self._index_data_impl, data)
+
 
     def _index_data_impl(self, data: list):
         """Actual data indexing implementation"""
@@ -170,9 +186,11 @@ class TypesenseClient:
                 logger.error(f"Error indexing document {document.get('Id-repo', 'unknown')}: {e}")
                 continue
 
+
     def document_exists(self, document_id: str):
         """Check if document exists with timeout handling"""
         return self._with_timeout(self._document_exists_impl, document_id)
+
 
     def _document_exists_impl(self, document_id: str):
         """Actual document existence check"""
@@ -181,3 +199,10 @@ class TypesenseClient:
             return True
         except ObjectNotFound:
             return False
+
+# Singleton instance - must be after class definition
+client_instance = TypesenseClient()
+
+def get_typesense_client():
+    """Get the shared Typesense client instance"""
+    return client_instance

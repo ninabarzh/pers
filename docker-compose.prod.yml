@@ -8,7 +8,6 @@ services:
       - TYPESENSE_API_KEY=${TYPESENSE_API_KEY}
       - TYPESENSE_DATA_DIR=/data
       - GOTRACEBACK=all # For better debugging
-      - TYPESENSE_STARTUP_WAIT_SECONDS=30
     command: >
       sh -c "mkdir -p $${TYPESENSE_DATA_DIR} &&
       echo 'Starting Typesense server...' &&
@@ -49,9 +48,13 @@ services:
       - DEBUG=false
       - PYTHONPATH=/app/src
       - TYPESENSE_API_KEY=${TYPESENSE_API_KEY}
-      - TYPESENSE_HOST=${TYPESENSE_HOST}
-      - TYPESENSE_PORT=${TYPESENSE_PORT}
-      - TYPESENSE_PROTOCOL=${TYPESENSE_PROTOCOL}
+      - TYPESENSE_HOST=typesense
+      - TYPESENSE_PORT=8108
+      - TYPESENSE_PROTOCOL=http
+      - STARTUP_DELAY=15
+    volumes:
+      - /home/deploy/app/.env:/app/.env:ro  # Mount the env file
+      - static_volume:/app/src/static # Mount static files
     deploy:
       resources:
         limits:
@@ -60,13 +63,13 @@ services:
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
       interval: 10s
-      timeout: 5s
-      retries: 10  # Increased from 3
+      timeout: 3s
+      retries: 5  # Increased from 3
       start_period: 30s  # Increased grace period
     command: >
-      sh -c "echo 'Waiting for Typesense...' &&
-      sleep $${STARTUP_DELAY} &&
-      python -m src.app.main"
+      sh -c "echo 'Waiting $${STARTUP_DELAY}s for dependencies...';
+      sleep $${STARTUP_DELAY};
+      uvicorn src.app.main:app --host 0.0.0.0 --port 8000 --no-access-log"
     depends_on:
       typesense:
         condition: service_healthy
@@ -128,10 +131,16 @@ services:
 
 volumes:
   typesense_data:
-  static_volume:
+    driver: local
     driver_opts:
       type: none
-      device: /data/static
+      device: /home/deploy/app_data/typesense
+      o: bind
+  static_volume:
+    driver: local
+    driver_opts:
+      type: none
+      device: /home/deploy/app_data/static
       o: bind
   certbot_www:
   certbot_conf:

@@ -7,6 +7,7 @@ from starlette.applications import Starlette
 from starlette.routing import Route, Mount
 from starlette.responses import JSONResponse
 from starlette.staticfiles import StaticFiles
+from .typesense_client import get_typesense_client
 
 # Initialize logging
 logging.basicConfig(level=logging.DEBUG)
@@ -50,19 +51,29 @@ try:
 except Exception as e:
     logger.error(f"Failed to create static directory: {e}")
 
+
 async def health_check(request):
-    """Enhanced health check that verifies Typesense connection"""
+    """Enhanced health check endpoint"""
     try:
-        # Add your Typesense health check logic here
-        # Example: await typesense_client.health()
-        return JSONResponse(
-            {"status": "healthy", "services": ["typesense"]},
-            status_code=200
-        )
+        client = get_typesense_client()
+        health_data = client.health()  # Using the health() method we added
+
+        if not health_data.get('ok'):
+            logger.warning(f"Typesense health check failed: {health_data.get('error', 'Unknown error')}")
+
+        return JSONResponse({
+            "status": "healthy" if health_data.get('ok') else "degraded",
+            "services": {
+                "typesense": health_data,
+                "api": True
+            }
+        }, status_code=200 if health_data.get('ok') else 503)
+
     except Exception as e:
+        logger.error(f"Health check system error: {str(e)}")
         return JSONResponse(
-            {"status": "unhealthy", "error": str(e)},
-            status_code=503
+            {"status": "unhealthy", "error": "Internal server error"},
+            status_code=500
         )
 
 async def root(request):
