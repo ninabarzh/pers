@@ -137,22 +137,41 @@ jobs:
       - name: Set up SSL certificates
         run: |
           ssh -T -o StrictHostKeyChecking=no deploy@${{ secrets.HETZNER_SERVER_IP }} << 'EOT'
-          set -e
+          set -ex  # Enable debugging and exit on error
           cd /home/deploy/app
           
-          # Stop nginx if running (to free up port 80 for standalone mode)
+          # Ensure network exists
+          docker network create app-network || true
+          
+          # Stop nginx if running (with force in case of stuck container)
           docker compose -f docker-compose.prod.yml stop nginx || true
-
-          # First run with standalone authenticator
-          docker compose -f docker-compose.prod.yml run --rm certbot certonly \
-            --standalone \
-            --email ${{ secrets.PROD_EMAIL }} --agree-tos --no-eff-email \
-            -d ${{ secrets.PROD_DOMAIN }} -d www.${{ secrets.PROD_DOMAIN }} \
+          docker compose -f docker-compose.prod.yml rm -f nginx || true
+          
+          # Clean up any previous certbot containers
+          docker compose -f docker-compose.prod.yml rm -f certbot || true
+          
+          # Run certbot with explicit timeout and cleanup
+          docker compose -f docker-compose.prod.yml run --rm --service-ports certbot \
+            sh -c "certbot certonly --standalone \
+            --non-interactive \
+            --email ${{ secrets.PROD_EMAIL }} \
+            --agree-tos \
+            -d ${{ secrets.PROD_DOMAIN }} \
+            -d www.${{ secrets.PROD_DOMAIN }} \
             --preferred-challenges http \
-            --force-renewal
-
-          # Start nginx with SSL configuration
-          docker compose -f docker-compose.prod.yml up -d nginx
+            --force-renewal \
+            --http-01-port 8080"  # Use alternative port if needed
+          
+          # Verify certificates exist
+          sudo ls -la /home/deploy/app_data/certbot/conf/live/${{ secrets.PROD_DOMAIN }}/
+          
+          # Full restart with SSL
+          docker compose -f docker-compose.prod.yml up -d --force-recreate
+          
+          # Verify nginx is using SSL
+          sleep 10  # Wait for nginx to initialize
+          docker compose -f docker-compose.prod.yml logs nginx | grep "SSL"
+          curl -Ikv https://${{ secrets.PROD_DOMAIN }} 2>&1 | grep -i "SSL\|certificate"
           EOT
 
       - name: Verify deployment
