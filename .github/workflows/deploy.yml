@@ -120,13 +120,22 @@ jobs:
           # =========================================
           # PHASE 4: SSL & NGINX SETUP
           # =========================================
-          # Stop nginx if running
+          # Clean up any existing nginx
           docker compose -f docker-compose.prod.yml stop nginx || true
+          docker compose -f docker-compose.prod.yml rm -f nginx || true
+
+          # Ensure certbot directories exist
+          mkdir -p data/certbot/{conf,www}
 
           # Renew or create certificates
           if [ ! -d "data/certbot/conf/live/${{ secrets.PROD_DOMAIN }}" ]; then
             echo "Initializing SSL certificates..."
-            ./init-letsencrypt.sh
+            docker compose -f docker-compose.prod.yml up -d nginx
+            sleep 5
+            docker compose -f docker-compose.prod.yml run --rm certbot certonly \
+              --webroot -w /var/www/certbot \
+              --email nina@tymyrddin.dev --agree-tos --non-interactive \
+              -d ${{ secrets.PROD_DOMAIN }} -d www.${{ secrets.PROD_DOMAIN }}
           else
             echo "Renewing SSL certificates..."
             docker compose -f docker-compose.prod.yml run --rm certbot renew --force-renewal
@@ -135,12 +144,19 @@ jobs:
           # Start nginx with retry logic
           for i in {1..5}; do
             echo "Starting nginx (attempt $i/5)..."
-            docker compose -f docker-compose.prod.yml up -d nginx
+            docker compose -f docker-compose.prod.yml up -d --force-recreate nginx
             sleep 5
             
+            # Verify nginx is running and healthy
             if docker compose -f docker-compose.prod.yml ps | grep -q "nginx.*Up"; then
-              echo "Nginx started successfully"
-              break
+              # Test configuration
+              if docker compose -f docker-compose.prod.yml exec nginx nginx -t; then
+                echo "Nginx started successfully with valid configuration"
+                break
+              else
+                echo "Nginx configuration test failed"
+                docker compose -f docker-compose.prod.yml logs nginx
+              fi
             fi
             
             if [ $i -eq 5 ]; then
@@ -150,8 +166,7 @@ jobs:
             fi
           done
 
-          # Verify nginx configuration
-          docker compose -f docker-compose.prod.yml exec nginx nginx -t
+          # Final reload
           docker compose -f docker-compose.prod.yml exec nginx nginx -s reload
           EOT
         timeout-minutes: 30
@@ -167,19 +182,33 @@ jobs:
           echo "=== Full Container Status ==="
           docker compose -f docker-compose.prod.yml ps -a
           
+          # First verify nginx is running
+          if ! docker compose -f docker-compose.prod.yml ps | grep -q "nginx.*Up"; then
+            echo "ERROR: Nginx is not running"
+            echo "Attempting to start nginx..."
+            docker compose -f docker-compose.prod.yml up -d nginx
+            sleep 5
+            if ! docker compose -f docker-compose.prod.yml ps | grep -q "nginx.*Up"; then
+              echo "Nginx failed to start"
+              docker compose -f docker-compose.prod.yml logs nginx
+              exit 1
+            fi
+          fi
+          
           echo "\n=== Nginx Configuration Test ==="
           docker compose -f docker-compose.prod.yml exec nginx nginx -t
           
           echo "\n=== SSL Certificate Verification ==="
           docker compose -f docker-compose.prod.yml exec nginx ls -la /etc/letsencrypt/live/${{ secrets.PROD_DOMAIN }}/
-          docker compose -f docker-compose.prod.yml exec nginx cat /etc/letsencrypt/live/${{ secrets.PROD_DOMAIN }}/fullchain.pem | openssl x509 -noout -dates
+          docker compose -f docker-compose.prod.yml exec nginx cat /etc/letsencrypt/live/${{ secrets.PROD_DOMAIN }}/fullchain.pem | \
+            openssl x509 -noout -dates || echo "Certificate check failed"
           
-          echo "\n=== Nginx Error Log ==="
-          docker compose -f docker-compose.prod.yml exec nginx tail -n 20 /var/log/nginx/error.log || true
+          echo "\n=== Nginx Error Log (last 20 lines) ==="
+          docker compose -f docker-compose.prod.yml exec nginx tail -n 20 /var/log/nginx/error.log || echo "Error log unavailable"
           
           echo "\n=== Service Health Checks ==="
           echo "Typesense:" $(docker compose -f docker-compose.prod.yml exec typesense curl -s http://localhost:8108/health)
-          echo "Backend:" $(docker compose -f docker-compose.prod.yml exec backend curl -s http://localhost:${{ secrets.PROD_BACKEND_PORT }}/health)
+          echo "Backend:" $(docker compose -f docker-compose.prod.yml exec backend curl -s http://localhost:${{ secrets.PROD_BACKEND_PORT }}/health || echo "Backend unreachable")
           
           echo "\n=== HTTPS Test ==="
           if ! curl -Isk --retry 3 --retry-delay 5 https://${{ secrets.PROD_DOMAIN }} | grep -E 'HTTP|Location'; then
@@ -193,6 +222,5 @@ jobs:
             exit 1
           fi
           
-          echo "\n=== Deployment Success ==="
+          echo "\n=== Deployment Successful ==="
           EOT
-
