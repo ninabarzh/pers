@@ -21,6 +21,20 @@ jobs:
 
       - name: Transfer files to server
         run: |
+          # First clean up problematic directories on server
+          ssh -o StrictHostKeyChecking=no deploy@${{ secrets.HETZNER_SERVER_IP }} << 'EOF'
+          set -e
+          cd /home/deploy/app
+          
+          # Reset permissions for rsync cleanup
+          sudo chown -R deploy:docker app_data/certbot || true
+          sudo chmod -R 775 app_data/certbot || true
+          
+          # Remove only what rsync needs to replace
+          sudo rm -rf app_data/certbot/www/.well-known || true
+          EOF
+          
+          # Then run original working rsync command
           rsync -avz --delete \
             --exclude='.git' \
             --exclude='.github' \
