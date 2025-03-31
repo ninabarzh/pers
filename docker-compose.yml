@@ -10,7 +10,16 @@ services:
       - "${TYPESENSE_PORT}:8108"  # Map configured port to default Typesense port
     environment:
       - TYPESENSE_API_KEY=${TYPESENSE_API_KEY}  # Authentication key
-      - TYPESENSE_DATA_DIR=${TYPESENSE_DATA_DIR}  # Persistent data location
+      - TYPESENSE_DATA_DIR=/data  # Persistent data location
+      - TYPESENSE_STARTUP_WAIT_SECONDS=30
+    # Command override:
+    command: >
+      sh -c "echo 'Waiting for Typesense to initialize...' && 
+      sleep $${TYPESENSE_STARTUP_WAIT_SECONDS} && 
+      /usr/bin/typesense-server 
+      --data-dir=$${TYPESENSE_DATA_DIR} 
+      --api-key=$${TYPESENSE_API_KEY} 
+      --listen-port=8108"
     volumes:
       - typesense_data:/data  # Named volume for search data persistence
     healthcheck:

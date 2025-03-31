@@ -1,24 +1,29 @@
 # backend/Dockerfile.typesense
-# Use the official Typesense image as the base
+# Development-focused Typesense configuration
 FROM typesense/typesense:0.24.1
 
-# Install curl (required for health checks)
+# Install curl for health checks (dev needs more tools)
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends curl && \
-    apt-get clean && \
+    apt-get install -y --no-install-recommends \
+    curl vim-tiny && \
     rm -rf /var/lib/apt/lists/*
 
-# Create the typesense user and set permissions
+# Create user with development permissions
 RUN useradd -r -u 1001 -g root typesense && \
     mkdir -p /data && \
-    chown typesense:root /data
+    chown -R typesense:root /data && \
+    chmod -R 777 /data  # More permissive for dev
 
-# Switch to the typesense user
+# Health check with shorter intervals
+HEALTHCHECK --interval=10s --timeout=5s \
+    CMD curl -f http://localhost:8108/health || exit 1
+
 USER typesense
-
-# Expose the Typesense port
 EXPOSE 8108
 
-# Health check (can also be defined in docker-compose.yml)
-HEALTHCHECK --interval=10s --timeout=5s --retries=3 \
-    CMD curl -f http://localhost:8108/health || exit 1
+# Simple command (no memory limits)
+CMD ["/usr/bin/typesense-server", \
+    "--data-dir=/data", \
+    "--api-key=${TYPESENSE_API_KEY}", \
+    "--listen-port=8108", \
+    "--enable-cors"]

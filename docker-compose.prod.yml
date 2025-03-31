@@ -3,25 +3,38 @@ services:
   typesense:
     build:
       context: .
-      dockerfile: backend/Dockerfile.typesense
+      dockerfile: backend/Dockerfile.typesense.prod
     environment:
       - TYPESENSE_API_KEY=${TYPESENSE_API_KEY}
-      - TYPESENSE_DATA_DIR=${TYPESENSE_DATA_DIR}
-      - TYPESENSE_STARTUP_WAIT_SECONDS=30
+      - TYPESENSE_DATA_DIR=/data
+      - GOTRACEBACK=all # For better debugging
+    command: >
+      sh -c "mkdir -p /data && 
+      /usr/bin/typesense-server 
+      --data-dir=$${TYPESENSE_DATA_DIR} 
+      --api-key=$${TYPESENSE_API_KEY} 
+      --listen-port=8108 
+      --enable-cors"
     volumes:
         - typesense_data:/data
     deploy:
       resources:
         limits:
-          memory: 2G
-          cpus: '1.0'
+          memory: 4G
+          cpus: '1.5'
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8108/health"]
-      interval: 15s
-      timeout: 5s
-      retries: 5
+      test: ["CMD-SHELL", "curl -sf http://localhost:8108/health || exit 1"]
+      interval: 10s
+      timeout: 30s
+      retries: 30
+      start_period: 30s #initial grace period
     networks:
       - app-network
+    restart: unless-stopped
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
 
   backend:
     build:
@@ -50,6 +63,7 @@ services:
         condition: service_healthy
     networks:
       - app-network
+    restart: unless-stopped
 
   frontend:
     build:

@@ -1,3 +1,4 @@
+# docker-compose.override.yml
 services:
   # Backend Test Service - Development only
   backend-tests:
@@ -12,6 +13,7 @@ services:
     environment:
       - TEST_ENV=development  # Test-specific environment
       - TYPESENSE_API_KEY=${TEST_TYPESENSE_API_KEY:-test_key}  # Test API key
+      - TYPESENSE_STARTUP_WAIT_SECONDS=5
     depends_on:
       - typesense  # Requires Typesense to be available
     command: ["./run_tests.sh"]  # Custom test runner
