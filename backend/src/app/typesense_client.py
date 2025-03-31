@@ -62,27 +62,32 @@ class TypesenseClient:
                 "status": "unavailable"
             }
 
-
     def _initialize_client(self):
-        """Simplified initialization that works with Docker env variables"""
-        self.TYPESENSE_API_KEY = os.getenv('TYPESENSE_API_KEY')
-        self.TYPESENSE_HOST = os.getenv('TYPESENSE_HOST', 'typesense')
-        self.TYPESENSE_PORT = os.getenv('TYPESENSE_PORT', '8108')
-        self.TYPESENSE_PROTOCOL = os.getenv('TYPESENSE_PROTOCOL', 'http')
-        self.TIMEOUT_SECONDS = float(os.getenv('TYPESENSE_TIMEOUT_SECONDS', '30'))
+        """Robust client initialization"""
+        # Try loading from mounted .env first
+        env_path = Path('/app/.env')
+        if env_path.exists():
+            load_dotenv(env_path)
 
-        if not self.TYPESENSE_API_KEY:
+        # Get config from environment
+        api_key = os.getenv('TYPESENSE_API_KEY')
+        host = os.getenv('TYPESENSE_HOST', 'typesense')
+        port = os.getenv('TYPESENSE_PORT', '8108')
+        protocol = os.getenv('TYPESENSE_PROTOCOL', 'http')
+
+        if not api_key:
+            logger.error("Missing TYPESENSE_API_KEY")
             raise ValueError("TYPESENSE_API_KEY is required")
 
-        logger.info(f"Initializing Typesense client with: {self.TYPESENSE_HOST}:{self.TYPESENSE_PORT}")
+        logger.info(f"Connecting to Typesense at {protocol}://{host}:{port}")
 
         self.client = typesense.Client({
-            'api_key': self.TYPESENSE_API_KEY,
+            'api_key': api_key,
             'nodes': [{
-                'host': self.TYPESENSE_HOST,
-                'port': self.TYPESENSE_PORT,
-                'protocol': self.TYPESENSE_PROTOCOL,
-                'connection_timeout_seconds': self.TIMEOUT_SECONDS
+                'host': host,
+                'port': port,
+                'protocol': protocol,
+                'connection_timeout_seconds': 10
             }]
         })
 
