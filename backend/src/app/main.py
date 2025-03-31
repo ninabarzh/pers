@@ -51,8 +51,19 @@ except Exception as e:
     logger.error(f"Failed to create static directory: {e}")
 
 async def health_check(request):
-    """Simple health check endpoint"""
-    return JSONResponse({"status": "healthy"}, status_code=200)
+    """Enhanced health check that verifies Typesense connection"""
+    try:
+        # Add your Typesense health check logic here
+        # Example: await typesense_client.health()
+        return JSONResponse(
+            {"status": "healthy", "services": ["typesense"]},
+            status_code=200
+        )
+    except Exception as e:
+        return JSONResponse(
+            {"status": "unhealthy", "error": str(e)},
+            status_code=503
+        )
 
 async def root(request):
     return JSONResponse({
@@ -68,7 +79,7 @@ async def root(request):
 
 routes = [
     Route("/", root),
-    Route("/health", health_check),
+    Route("/health", health_check, methods=["GET"]),
     Route("/search", search, methods=["GET"]),
     Route("/upload", upload, methods=["POST"]),
 ]

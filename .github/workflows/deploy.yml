@@ -95,23 +95,22 @@ jobs:
           ssh -T -o StrictHostKeyChecking=no deploy@${{ secrets.HETZNER_SERVER_IP }} << 'EOT'
           set -e
           cd /home/deploy/app
-
+      
           # Clean up old containers
           docker compose -f docker-compose.prod.yml down -v || true
-
-          # Start services without certbot
-          docker compose -f docker-compose.prod.yml up -d --build nginx typesense backend frontend
-
-          # Wait for backend to be healthy
+      
+          # Start core services first
+          docker compose -f docker-compose.prod.yml up -d --build typesense backend
+      
+          # Wait for backend to become healthy
           echo "Waiting for backend to become healthy..."
-          for i in {1..30}; do
-            if docker compose -f docker-compose.prod.yml exec backend curl -sf http://localhost:8000/health; then
-              echo "Backend is healthy"
-              break
-            fi
+          timeout 180s bash -c 'until docker compose -f docker-compose.prod.yml exec backend curl -f http://localhost:8000/health; do
             sleep 5
-            echo "Attempt $i: Backend not ready yet..."
-          done
+            echo "Waiting for backend..."
+          done'
+      
+          # Start remaining services
+          docker compose -f docker-compose.prod.yml up -d --build
           EOT
 
       - name: Set up SSL certificates

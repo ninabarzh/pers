@@ -59,10 +59,14 @@ services:
           cpus: '0.5'
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
-      interval: 30s
-      timeout: 30s  # Increased timeout
-      retries: 5    # Increased retries
-      start_period: 60s  # Longer startup time
+      interval: 10s
+      timeout: 5s
+      retries: 10  # Increased from 3
+      start_period: 30s  # Increased grace period
+    command: >
+      sh -c "echo 'Waiting for Typesense...' &&
+      sleep $${STARTUP_DELAY} &&
+      python -m src.app.main"
     depends_on:
       typesense:
         condition: service_healthy
