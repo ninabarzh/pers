@@ -102,8 +102,8 @@ services:
 
   nginx:
     build:
-      context: .
-      dockerfile: nginx/Dockerfile.prod
+      context: .nginx
+      dockerfile: Dockerfile.prod
     # production server deploy:docker UID/GID
     user: "1001:1001"
     volumes:

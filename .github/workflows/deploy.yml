@@ -33,12 +33,20 @@ jobs:
             "$GITHUB_WORKSPACE/" \
             "deploy@${{ secrets.HETZNER_SERVER_IP }}:/home/deploy/app/"
 
-      - name: Verify server files
+      - name: Verify NGINX build files
         run: |
           ssh -T deploy@${{ secrets.HETZNER_SERVER_IP }} << 'EOT'
-          set -x
-          cd /home/deploy/app
-          ls -la nginx/
+          set -ex
+          cd /home/deploy/app/nginx
+          
+          echo "=== NGINX build files ==="
+          ls -la
+          echo "=== Dockerfile contents ==="
+          cat Dockerfile.prod || echo "No Dockerfile.prod found"
+          echo "=== NGINX config ==="
+          cat nginx.prod.conf || echo "No nginx.prod.conf found"
+          echo "=== Snippets directory ==="
+          ls -la snippets/
           EOT
 
       - name: Handle DH params
@@ -112,6 +120,17 @@ jobs:
           set -e
           sudo mkdir -p /home/deploy/app/nginx/{config/dhparam,snippets}
           sudo chown -R deploy:docker /home/deploy/app/nginx
+          EOT
+
+      - name: Build NGINX image
+        run: |
+          ssh -T deploy@${{ secrets.HETZNER_SERVER_IP }} << 'EOT'
+          set -e
+          cd /home/deploy/app
+          echo "=== Building NGINX image ==="
+          docker compose -f docker-compose.prod.yml build --no-cache --pull nginx
+          echo "=== Build complete ==="
+          docker images | grep nginx
           EOT
 
       - name: Deploy services with proper dependency handling
