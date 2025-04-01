@@ -21,27 +21,25 @@ jobs:
 
       - name: Transfer files to server
         run: |
-          # 1. Setup directories without sudo
+          # 1. Prepare environment with sudo commands
           ssh -o StrictHostKeyChecking=no deploy@${{ secrets.HETZNER_SERVER_IP }} << 'EOT'
           set -ex
           cd /home/deploy/app
           
-          # Create directory structure as deploy user
-          mkdir -p app_data/certbot/{conf/live,www}
+          # Create directories (using whitelisted sudo commands)
+          sudo mkdir -p app_data/certbot/{conf/live,www}
+          sudo chown -R deploy:docker app_data/
+          sudo find app_data/ -type d -exec chmod 775 {} \;
+          sudo find app_data/ -type f -exec chmod 664 {} \;
           
-          # Set base permissions (no sudo needed)
-          chown -R deploy:docker app_data/
-          find app_data/ -type d -exec chmod 775 {} \;
-          find app_data/ -type f -exec chmod 664 {} \;
-          
-          # Special certbot permissions (using allowed sudo commands)
-          sudo -n mkdir -p /tmp/certbot_backup
+          # Backup certs
           if [ -d "app_data/certbot/conf/live" ] && [ -n "$(ls -A app_data/certbot/conf/live)" ]; then
-            sudo -n tar -czf /tmp/certbot_backup/latest.tgz -C app_data/certbot/conf/live .
+            sudo mkdir -p /tmp/certbot_backup
+            sudo tar -czf /tmp/certbot_backup/latest.tgz -C app_data/certbot/conf/live .
           fi
           EOT
           
-          # 2. Transfer files using deploy user permissions
+          # 2. Transfer files
           rsync -rlptDzv \
             --delete \
             --exclude='.git' \
@@ -53,22 +51,22 @@ jobs:
             "$GITHUB_WORKSPACE/" \
             "deploy@${{ secrets.HETZNER_SERVER_IP }}:/home/deploy/app/"
           
-          # 3. Finalize permissions with minimal sudo
+          # 3. Finalize with sudo commands
           ssh -o StrictHostKeyChecking=no deploy@${{ secrets.HETZNER_SERVER_IP }} << 'EOT'
           set -ex
           cd /home/deploy/app
           
-          # Restore certs if backup exists (using allowed sudo)
+          # Restore certs
           if [ -f "/tmp/certbot_backup/latest.tgz" ]; then
-            sudo -n mkdir -p app_data/certbot/conf/live
-            sudo -n tar -xzf /tmp/certbot_backup/latest.tgz -C app_data/certbot/conf/live
-            sudo -n rm -f /tmp/certbot_backup/latest.tgz
+            sudo mkdir -p app_data/certbot/conf/live
+            sudo tar -xzf /tmp/certbot_backup/latest.tgz -C app_data/certbot/conf/live
+            sudo rm -f /tmp/certbot_backup/latest.tgz
           fi
           
-          # Final certbot permissions (only these need sudo)
-          sudo -n chown -R root:docker app_data/certbot/conf/
-          sudo -n find app_data/certbot/conf/ -type d -exec chmod 750 {} \;
-          sudo -n find app_data/certbot/conf/ -type f -exec chmod 640 {} \;
+          # Critical: Set certbot permissions
+          sudo chown -R root:docker app_data/certbot/conf/
+          sudo find app_data/certbot/conf/ -type d -exec chmod 750 {} \;
+          sudo find app_data/certbot/conf/ -type f -exec chmod 640 {} \;
           
           # Verify
           ls -la docker-compose.prod.yml nginx/nginx.prod.conf
