@@ -33,6 +33,14 @@ jobs:
             "$GITHUB_WORKSPACE/" \
             "deploy@${{ secrets.HETZNER_SERVER_IP }}:/home/deploy/app/"
 
+      - name: Verify server files
+        run: |
+          ssh -T deploy@${{ secrets.HETZNER_SERVER_IP }} << 'EOT'
+          set -x
+          cd /home/deploy/app
+          ls -la nginx/
+          EOT
+
       - name: Handle DH params
         run: |
           ssh -T -o StrictHostKeyChecking=no deploy@${{ secrets.HETZNER_SERVER_IP }} << 'EOT'
@@ -113,7 +121,7 @@ jobs:
           cd /home/deploy/app
           
           # Explicitly build NGINX first
-          docker compose -f docker-compose.prod.yml build nginx
+          docker compose -f docker-compose.prod.yml build --pull nginx
           
           # Clean up previous deployment
           docker compose -f docker-compose.prod.yml down -v || true
