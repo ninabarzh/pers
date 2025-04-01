@@ -102,6 +102,8 @@ services:
 
   nginx:
     image: nginx:1.25-alpine
+    # production server deploy:docker UID/GID
+    user: "1001:1001"
     volumes:
       - ./nginx/nginx.prod.conf:/etc/nginx/nginx.conf
       - ./nginx/snippets:/etc/nginx/snippets
