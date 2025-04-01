@@ -21,24 +21,25 @@ jobs:
 
       - name: Transfer files to server
         run: |
-          # Disable ESM status checks during transfer
+          # 1. Prepare server environment (completely non-interactive)
           ssh -o StrictHostKeyChecking=no deploy@${{ secrets.HETZNER_SERVER_IP }} << 'EOT'
           set -e
           cd /home/deploy/app
           
-          # Temporarily suppress ESM messages
-          sudo mkdir -p /etc/needrestart/conf.d/
-          echo "\$nrconf{restart} = 'a';" | sudo tee /etc/needrestart/conf.d/disable.conf >/dev/null
+          # Disable ALL sudo prompts (temporarily)
+          echo "Defaults:deploy !requiretty" | sudo tee /etc/sudoers.d/temp-noprompt >/dev/null
+          echo "Defaults:deploy !authenticate" | sudo tee -a /etc/sudoers.d/temp-noprompt >/dev/null
           
-          # Backup existing SSL certs (passwordless)
+          # Perform operations
           sudo tar -czf /tmp/certbot_backup.tar.gz app_data/certbot/conf/live/ 2>/dev/null || true
-          
-          # Set permissive permissions temporarily
           sudo chown -R deploy:docker app_data/ || true
           sudo chmod -R 775 app_data/ || true
+          
+          # Restore original sudo behavior
+          sudo rm -f /etc/sudoers.d/temp-noprompt
           EOT
           
-          # File transfer (unchanged)
+          # 2. Run rsync transfer (unchanged)
           rsync -rlptDzv \
             --delete \
             --exclude='.git' \
@@ -50,23 +51,22 @@ jobs:
             "$GITHUB_WORKSPACE/" \
             "deploy@${{ secrets.HETZNER_SERVER_IP }}:/home/deploy/app/"
           
-          # Restore state and cleanup
+          # 3. Restore server state
           ssh -o StrictHostKeyChecking=no deploy@${{ secrets.HETZNER_SERVER_IP }} << 'EOT'
           set -e
           cd /home/deploy/app
           
-          # Restore SSL certs
+          # Temporarily disable sudo prompts again
+          echo "Defaults:deploy !requiretty" | sudo tee /etc/sudoers.d/temp-noprompt >/dev/null
+          
+          # Restore operations
           sudo tar -xzf /tmp/certbot_backup.tar.gz -C ./ 2>/dev/null || true
           sudo rm -f /tmp/certbot_backup.tar.gz
-          
-          # Restore permissions
           sudo chown -R root:docker app_data/certbot/conf/
           sudo chmod -R 750 app_data/certbot/conf/
           
-          # Clean up ESM suppression
-          sudo rm -f /etc/needrestart/conf.d/disable.conf 2>/dev/null || true
-          
-          # Verify transfer
+          # Cleanup
+          sudo rm -f /etc/sudoers.d/temp-noprompt
           ls -la docker-compose.prod.yml nginx/nginx.prod.conf
           EOT
 
