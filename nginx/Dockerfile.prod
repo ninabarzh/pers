@@ -1,27 +1,34 @@
 # nginx/Dockerfile.prod
 FROM nginx:1.25-alpine
 
-# Install Brotli packages (both required)
-RUN apk add --no-cache brotli brotli-libs
+# Install Brotli and verify module paths
+RUN apk add --no-cache brotli brotli-libs && \
+    mkdir -p /usr/lib/nginx/modules && \
+    ln -s /usr/lib/nginx/modules /etc/nginx/modules
 
-# 2Create user and setup modules
+# Create user and setup modules
 RUN adduser -D -H -u 1001 -s /bin/false deploy && \
-    mkdir -p /etc/nginx/modules
+    addgroup docker && \
+    adduser deploy docker
 
-# Create temporary nginx.conf with module loading
+# Verify module files exist
+RUN ls -la /usr/lib/nginx/modules/ngx_http_brotli_*.so
+
+# Create config with module loading
 RUN echo "load_module /usr/lib/nginx/modules/ngx_http_brotli_filter_module.so;" > /etc/nginx/nginx.conf && \
-    echo "load_module /usr/lib/nginx/modules/ngx_http_brotli_static_module.so;" >> /etc/nginx/nginx.conf && \
-    echo "user deploy;" >> /etc/nginx/nginx.conf
+    echo "load_module /usr/lib/nginx/modules/ngx_http_brotli_static_module.so;" >> /etc/nginx/nginx.conf &&
 
-# Copy your main config (appends to existing nginx.conf)
+# Merge config (appends to existing nginx.conf)
 COPY nginx.prod.conf /etc/nginx/nginx-temp.conf
-RUN cat /etc/nginx/nginx-temp.conf >> /etc/nginx/nginx.conf && rm /etc/nginx/nginx-temp.conf
+RUN cat /etc/nginx/nginx-temp.conf >> /etc/nginx/nginx.conf && \
+    rm /etc/nginx/nginx-temp.conf && \
+    echo "user deploy;" >> /etc/nginx/nginx.conf
 
 # Copy snippets
 COPY snippets/ /etc/nginx/snippets/
 
 # Fix permissions
-RUN chown -R deploy:deploy /var/cache/nginx /var/log/nginx && \
+RUN chown -R deploy:docker /var/cache/nginx /var/log/nginx && \
     chmod -R 775 /var/cache/nginx /var/log/nginx
 
 # Verify config
