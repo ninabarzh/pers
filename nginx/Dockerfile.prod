@@ -1,29 +1,29 @@
+# nginx/Dockerfile.prod
 FROM nginx:1.25-alpine
 
-# Install Brotli
-RUN apk add --no-cache brotli-libs && \
+# Install Brotli (both packages needed)
+RUN apk add --no-cache brotli brotli-libs
+
+# Create user and set up modules
+RUN adduser -D -H -u 1001 -s /bin/false deploy && \
     mkdir -p /etc/nginx/modules && \
     echo "load_module /usr/lib/nginx/modules/ngx_http_brotli_filter_module.so;" > /etc/nginx/modules/brotli.conf && \
     echo "load_module /usr/lib/nginx/modules/ngx_http_brotli_static_module.so;" >> /etc/nginx/modules/brotli.conf
-
-# Create the user first (matches production UID)
-RUN adduser -D -H -u 1001 -s /bin/false deploy
 
 # Copy config files
 COPY nginx.prod.conf /etc/nginx/nginx.conf
 COPY snippets/ /etc/nginx/snippets/
 
-# Fix permissions
-RUN chown -R 1001:1001 /var/cache/nginx && \
-    chown -R 1001:1001 /var/log/nginx && \
-    chmod -R 775 /var/cache/nginx && \
-    chmod -R 775 /var/log/nginx
+# Fix permissions (as root)
+RUN chown -R 1001:1001 /var/cache/nginx /var/log/nginx && \
+    chmod -R 775 /var/cache/nginx /var/log/nginx
 
-# Verify configuration (as root)
+# Verify config (AS ROOT - critical!)
 RUN nginx -t
 
-# Switch to the deploy user
+# Switch to non-root user for runtime
 USER 1001:1001
 
-# Verify configuration
-RUN nginx -t
+# Health check (as non-root)
+HEALTHCHECK --interval=30s --timeout=3s \
+  CMD curl -f http://localhost/ || exit 1
