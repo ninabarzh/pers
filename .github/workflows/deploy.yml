@@ -102,9 +102,9 @@ jobs:
         run: |
           ssh -T -o StrictHostKeyChecking=no deploy@${{ secrets.HETZNER_SERVER_IP }} << 'EOT'
           set -e
-          # Install brotli module for nginx
-          sudo apt-get update
-          sudo apt-get install -y brotli libnginx-mod-brotli
+          # Install brotli module for nginx (using passwordless sudo)
+          sudo -S apt-get update -qq
+          sudo -S apt-get install -y brotli libnginx-mod-brotli
           EOT
 
       - name: Ensure nginx directories exist
