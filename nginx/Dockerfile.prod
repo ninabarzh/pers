@@ -1,31 +1,35 @@
 # nginx/Dockerfile.prod
 FROM nginx:1.25-alpine
 
-# Install Brotli and verify module paths
-RUN apk add --no-cache brotli brotli-libs && \
-    mkdir -p /usr/lib/nginx/modules && \
-    ln -s /usr/lib/nginx/modules /etc/nginx/modules
+# 1. Install dependencies
+RUN apk add --no-cache curl brotli brotli-libs
 
-# Create user and setup modules
+# Create user and directories
 RUN adduser -D -H -u 1001 -s /bin/false deploy && \
     addgroup docker && \
-    adduser deploy docker
+    adduser deploy docker && \
+    mkdir -p /etc/nginx/modules /etc/nginx/snippets
 
-# Verify module files exist
-RUN ls -la /usr/lib/nginx/modules/ngx_http_brotli_*.so
+# Download configuration files directly from GitHub
+RUN curl -o /etc/nginx/nginx-temp.conf \
+    https://raw.githubusercontent.com/your-repo/main/nginx/nginx.prod.conf && \
+    curl -o /etc/nginx/snippets/security-headers.conf \
+    https://raw.githubusercontent.com/your-repo/main/nginx/snippets/security-headers.conf && \
+    curl -o /etc/nginx/snippets/ssl-params.conf \
+    https://raw.githubusercontent.com/your-repo/main/nginx/snippets/ssl-params.conf && \
+    curl -o /etc/nginx/snippets/proxy-headers.conf \
+    https://raw.githubusercontent.com/your-repo/main/nginx/snippets/proxy-headers.conf && \
+    curl -o /etc/nginx/snippets/cors.conf \
+    https://raw.githubusercontent.com/your-repo/main/nginx/snippets/cors.conf
 
-# Create config with module loading
+# Set up Brotli modules
 RUN echo "load_module /usr/lib/nginx/modules/ngx_http_brotli_filter_module.so;" > /etc/nginx/nginx.conf && \
-    echo "load_module /usr/lib/nginx/modules/ngx_http_brotli_static_module.so;" >> /etc/nginx/nginx.conf &&
+    echo "load_module /usr/lib/nginx/modules/ngx_http_brotli_static_module.so;" >> /etc/nginx/nginx.conf
 
-# Merge config (appends to existing nginx.conf)
-COPY /home/deploy/app/nginx/nginx.prod.conf /etc/nginx/nginx-temp.conf
+# Merge configurations
 RUN cat /etc/nginx/nginx-temp.conf >> /etc/nginx/nginx.conf && \
     rm /etc/nginx/nginx-temp.conf && \
     echo "user deploy;" >> /etc/nginx/nginx.conf
-
-# Copy snippets
-COPY /home/deploy/app/nginx/snippets/ /etc/nginx/snippets/
 
 # Fix permissions
 RUN chown -R deploy:docker /var/cache/nginx /var/log/nginx && \
@@ -34,9 +38,9 @@ RUN chown -R deploy:docker /var/cache/nginx /var/log/nginx && \
 # Verify config
 RUN nginx -t
 
-# Health check config (as non-root)
+# Health check
 HEALTHCHECK --interval=30s --timeout=3s \
-  CMD curl -f http://localhost/ || exit 1
+  CMD curl -fsS http://localhost/ || exit 1
 
 # Runtime user
 USER deploy
