@@ -26,15 +26,16 @@ jobs:
           set -e
           cd /home/deploy/app
           
-          # Backup certs (using configured sudo permissions)
-          sudo mkdir -p /tmp/certbot_backup/
-          [ -d app_data/certbot/conf/live ] && \
-            sudo tar -czf /tmp/certbot_backup/latest.tgz -C app_data/certbot/conf/live .
-          
-          # Set permissions
+          # Create app_data if missing (with correct permissions)
+          sudo mkdir -p app_data/certbot/conf/live
           sudo chown -R deploy:docker app_data/
-          sudo find app_data/ -type d -exec chmod 775 {} \;
-          sudo find app_data/ -type f -exec chmod 664 {} \;
+          sudo chmod -R 775 app_data/
+          
+          # Backup existing certs only if they exist
+          if [ -d "app_data/certbot/conf/live" ] && [ -n "$(ls -A app_data/certbot/conf/live)" ]; then
+            sudo mkdir -p /tmp/certbot_backup/
+            sudo tar -czf /tmp/certbot_backup/latest.tgz -C app_data/certbot/conf/live .
+          fi
           EOT
           
           # 2. Run rsync transfer
@@ -54,18 +55,19 @@ jobs:
           set -e
           cd /home/deploy/app
           
-          # Restore certs
-          [ -f /tmp/certbot_backup/latest.tgz ] && \
-            sudo mkdir -p app_data/certbot/conf/live && \
+          # Restore certs if backup exists
+          if [ -f "/tmp/certbot_backup/latest.tgz" ]; then
+            sudo mkdir -p app_data/certbot/conf/live
             sudo tar -xzf /tmp/certbot_backup/latest.tgz -C app_data/certbot/conf/live
+            sudo rm -rf /tmp/certbot_backup
+          fi
           
           # Final permissions
           sudo chown -R root:docker app_data/certbot/conf/
           sudo find app_data/certbot/conf/ -type d -exec chmod 750 {} \;
           sudo find app_data/certbot/conf/ -type f -exec chmod 640 {} \;
           
-          # Cleanup
-          sudo rm -rf /tmp/certbot_backup
+          # Verify
           ls -la docker-compose.prod.yml nginx/nginx.prod.conf
           EOT
 
