@@ -21,24 +21,30 @@ jobs:
 
       - name: Transfer files to server
         run: |
-          # 1. Prepare server environment
+          # 1. Prepare server environment with validation
           ssh -o StrictHostKeyChecking=no deploy@${{ secrets.HETZNER_SERVER_IP }} << 'EOT'
-          set -e
+          set -ex
           cd /home/deploy/app
           
-          # Create app_data if missing (with correct permissions)
-          sudo mkdir -p app_data/certbot/conf/live
-          sudo chown -R deploy:docker app_data/
-          sudo chmod -R 775 app_data/
+          # Ensure base directory exists
+          mkdir -p /home/deploy/app
           
-          # Backup existing certs only if they exist
-          if [ -d "app_data/certbot/conf/live" ] && [ -n "$(ls -A app_data/certbot/conf/live)" ]; then
-            sudo mkdir -p /tmp/certbot_backup/
-            sudo tar -czf /tmp/certbot_backup/latest.tgz -C app_data/certbot/conf/live .
+          # Create app_data structure with atomic permissions
+          sudo mkdir -p app_data/certbot/{conf/live,www}
+          sudo chown -R deploy:docker app_data/
+          sudo find app_data/ -type d -exec chmod 775 {} \;
+          sudo find app_data/ -type f -exec chmod 664 {} \;
+          
+          # Backup certs with validation
+          if [ -d "app_data/certbot/conf/live" ] && [ -n "$(ls -A app_data/certbot/conf/live 2>/dev/null)" ]; then
+            backup_dir="/tmp/certbot_backup_$(date +%s)"
+            sudo mkdir -p "$backup_dir"
+            sudo tar -czf "$backup_dir/latest.tgz" -C app_data/certbot/conf/live .
+            echo "Created backup in $backup_dir"
           fi
           EOT
           
-          # 2. Run rsync transfer
+          # 2. Run rsync with enhanced error handling
           rsync -rlptDzv \
             --delete \
             --exclude='.git' \
@@ -46,29 +52,49 @@ jobs:
             --exclude='.env*' \
             --exclude='node_modules' \
             --exclude='app_data/certbot/conf/live/' \
+            --rsync-path="sudo rsync" \
+            --backup --backup-dir=/tmp/rsync_backups \
             -e "ssh -o StrictHostKeyChecking=no" \
             "$GITHUB_WORKSPACE/" \
             "deploy@${{ secrets.HETZNER_SERVER_IP }}:/home/deploy/app/"
           
-          # 3. Restore server state
+          # 3. Restore and verify state
           ssh -o StrictHostKeyChecking=no deploy@${{ secrets.HETZNER_SERVER_IP }} << 'EOT'
-          set -e
+          set -ex
           cd /home/deploy/app
           
-          # Restore certs if backup exists
-          if [ -f "/tmp/certbot_backup/latest.tgz" ]; then
+          # Find most recent backup
+          latest_backup=$(ls -td /tmp/certbot_backup_* | head -1 2>/dev/null)
+          
+          # Restore if backup exists
+          if [ -n "$latest_backup" ] && [ -f "$latest_backup/latest.tgz" ]; then
             sudo mkdir -p app_data/certbot/conf/live
-            sudo tar -xzf /tmp/certbot_backup/latest.tgz -C app_data/certbot/conf/live
-            sudo rm -rf /tmp/certbot_backup
+            sudo tar -xzf "$latest_backup/latest.tgz" -C app_data/certbot/conf/live
+            sudo rm -rf "$latest_backup"
           fi
           
-          # Final permissions
+          # Ensure strict permissions for certbot
           sudo chown -R root:docker app_data/certbot/conf/
           sudo find app_data/certbot/conf/ -type d -exec chmod 750 {} \;
           sudo find app_data/certbot/conf/ -type f -exec chmod 640 {} \;
           
-          # Verify
-          ls -la docker-compose.prod.yml nginx/nginx.prod.conf
+          # Verify critical files
+          declare -a critical_files=(
+            "docker-compose.prod.yml"
+            "nginx/nginx.prod.conf"
+            "app_data/certbot/conf/live"
+          )
+          
+          for file in "${critical_files[@]}"; do
+            if [ ! -e "$file" ]; then
+              echo "❌ Critical file/dir missing: $file" >&2
+              exit 1
+            fi
+          done
+          
+          # Final validation
+          sudo docker compose -f docker-compose.prod.yml config >/dev/null
+          sudo nginx -t -c /home/deploy/app/nginx/nginx.prod.conf
           EOT
 
       - name: Create and secure .env file
