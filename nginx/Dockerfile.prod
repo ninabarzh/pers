@@ -12,15 +12,15 @@ RUN adduser -D -H -u 1001 -s /bin/false deploy && \
 
 # Download configuration files directly from GitHub
 RUN curl -o /etc/nginx/nginx-temp.conf \
-    https://raw.githubusercontent.com/your-repo/main/nginx/nginx.prod.conf && \
+    https://raw.githubusercontent.com/pers/main/nginx/nginx.prod.conf && \
     curl -o /etc/nginx/snippets/security-headers.conf \
-    https://raw.githubusercontent.com/your-repo/main/nginx/snippets/security-headers.conf && \
+    https://raw.githubusercontent.com/pers/main/nginx/snippets/security-headers.conf && \
     curl -o /etc/nginx/snippets/ssl-params.conf \
-    https://raw.githubusercontent.com/your-repo/main/nginx/snippets/ssl-params.conf && \
+    https://raw.githubusercontent.com/pers/main/nginx/snippets/ssl-params.conf && \
     curl -o /etc/nginx/snippets/proxy-headers.conf \
-    https://raw.githubusercontent.com/your-repo/main/nginx/snippets/proxy-headers.conf && \
+    https://raw.githubusercontent.com/pers/main/nginx/snippets/proxy-headers.conf && \
     curl -o /etc/nginx/snippets/cors.conf \
-    https://raw.githubusercontent.com/your-repo/main/nginx/snippets/cors.conf
+    https://raw.githubusercontent.com/pers/main/nginx/snippets/cors.conf
 
 # Set up Brotli modules
 RUN echo "load_module /usr/lib/nginx/modules/ngx_http_brotli_filter_module.so;" > /etc/nginx/nginx.conf && \
