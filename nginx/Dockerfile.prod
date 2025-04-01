@@ -1,29 +1,35 @@
 # nginx/Dockerfile.prod
 FROM nginx:1.25-alpine
 
-# Install Brotli (both packages needed)
+# Install Brotli packages (both required)
 RUN apk add --no-cache brotli brotli-libs
 
-# Create user and set up modules
+# 2Create user and setup modules
 RUN adduser -D -H -u 1001 -s /bin/false deploy && \
-    mkdir -p /etc/nginx/modules && \
-    echo "load_module /usr/lib/nginx/modules/ngx_http_brotli_filter_module.so;" > /etc/nginx/modules/brotli.conf && \
-    echo "load_module /usr/lib/nginx/modules/ngx_http_brotli_static_module.so;" >> /etc/nginx/modules/brotli.conf
+    mkdir -p /etc/nginx/modules
 
-# Copy config files
-COPY nginx.prod.conf /etc/nginx/nginx.conf
+# Create temporary nginx.conf with module loading
+RUN echo "load_module /usr/lib/nginx/modules/ngx_http_brotli_filter_module.so;" > /etc/nginx/nginx.conf && \
+    echo "load_module /usr/lib/nginx/modules/ngx_http_brotli_static_module.so;" >> /etc/nginx/nginx.conf && \
+    echo "user deploy;" >> /etc/nginx/nginx.conf
+
+# Copy your main config (appends to existing nginx.conf)
+COPY nginx.prod.conf /etc/nginx/nginx-temp.conf
+RUN cat /etc/nginx/nginx-temp.conf >> /etc/nginx/nginx.conf && rm /etc/nginx/nginx-temp.conf
+
+# Copy snippets
 COPY snippets/ /etc/nginx/snippets/
 
-# Fix permissions (as root)
-RUN chown -R 1001:1001 /var/cache/nginx /var/log/nginx && \
+# Fix permissions
+RUN chown -R deploy:deploy /var/cache/nginx /var/log/nginx && \
     chmod -R 775 /var/cache/nginx /var/log/nginx
 
-# Verify config (AS ROOT - critical!)
+# Verify config
 RUN nginx -t
 
-# Switch to non-root user for runtime
-USER 1001:1001
-
-# Health check (as non-root)
+# Health check config (as non-root)
 HEALTHCHECK --interval=30s --timeout=3s \
   CMD curl -f http://localhost/ || exit 1
+
+# Runtime user
+USER deploy
