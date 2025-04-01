@@ -21,20 +21,24 @@ jobs:
 
       - name: Transfer files to server
         run: |
-          # 1. Prepare server for transfer (using passwordless sudo)
+          # Disable ESM status checks during transfer
           ssh -o StrictHostKeyChecking=no deploy@${{ secrets.HETZNER_SERVER_IP }} << 'EOT'
           set -e
           cd /home/deploy/app
           
-          # Backup existing SSL certs (no password prompt)
-          sudo -n tar -czf /tmp/certbot_backup.tar.gz app_data/certbot/conf/live/ 2>/dev/null || true
+          # Temporarily suppress ESM messages
+          sudo mkdir -p /etc/needrestart/conf.d/
+          echo "\$nrconf{restart} = 'a';" | sudo tee /etc/needrestart/conf.d/disable.conf >/dev/null
+          
+          # Backup existing SSL certs (passwordless)
+          sudo tar -czf /tmp/certbot_backup.tar.gz app_data/certbot/conf/live/ 2>/dev/null || true
           
           # Set permissive permissions temporarily
-          sudo -n chown -R deploy:docker app_data/ || true
-          sudo -n chmod -R 775 app_data/ || true
+          sudo chown -R deploy:docker app_data/ || true
+          sudo chmod -R 775 app_data/ || true
           EOT
           
-          # 2. Run rsync with careful exclusions
+          # File transfer (unchanged)
           rsync -rlptDzv \
             --delete \
             --exclude='.git' \
@@ -46,18 +50,21 @@ jobs:
             "$GITHUB_WORKSPACE/" \
             "deploy@${{ secrets.HETZNER_SERVER_IP }}:/home/deploy/app/"
           
-          # 3. Restore server state (using passwordless sudo)
+          # Restore state and cleanup
           ssh -o StrictHostKeyChecking=no deploy@${{ secrets.HETZNER_SERVER_IP }} << 'EOT'
           set -e
           cd /home/deploy/app
           
-          # Restore SSL certs if they existed
-          sudo -n tar -xzf /tmp/certbot_backup.tar.gz -C ./ 2>/dev/null || true
-          sudo -n rm -f /tmp/certbot_backup.tar.gz
+          # Restore SSL certs
+          sudo tar -xzf /tmp/certbot_backup.tar.gz -C ./ 2>/dev/null || true
+          sudo rm -f /tmp/certbot_backup.tar.gz
           
-          # Restore secure permissions
-          sudo -n chown -R root:docker app_data/certbot/conf/
-          sudo -n chmod -R 750 app_data/certbot/conf/
+          # Restore permissions
+          sudo chown -R root:docker app_data/certbot/conf/
+          sudo chmod -R 750 app_data/certbot/conf/
+          
+          # Clean up ESM suppression
+          sudo rm -f /etc/needrestart/conf.d/disable.conf 2>/dev/null || true
           
           # Verify transfer
           ls -la docker-compose.prod.yml nginx/nginx.prod.conf
