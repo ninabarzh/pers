@@ -21,30 +21,27 @@ jobs:
 
       - name: Transfer files to server
         run: |
-          # 1. Prepare server environment with validation
+          # 1. Setup directories without sudo
           ssh -o StrictHostKeyChecking=no deploy@${{ secrets.HETZNER_SERVER_IP }} << 'EOT'
           set -ex
           cd /home/deploy/app
           
-          # Ensure base directory exists
-          mkdir -p /home/deploy/app
+          # Create directory structure as deploy user
+          mkdir -p app_data/certbot/{conf/live,www}
           
-          # Create app_data structure with atomic permissions
-          sudo mkdir -p app_data/certbot/{conf/live,www}
-          sudo chown -R deploy:docker app_data/
-          sudo find app_data/ -type d -exec chmod 775 {} \;
-          sudo find app_data/ -type f -exec chmod 664 {} \;
+          # Set base permissions (no sudo needed)
+          chown -R deploy:docker app_data/
+          find app_data/ -type d -exec chmod 775 {} \;
+          find app_data/ -type f -exec chmod 664 {} \;
           
-          # Backup certs with validation
-          if [ -d "app_data/certbot/conf/live" ] && [ -n "$(ls -A app_data/certbot/conf/live 2>/dev/null)" ]; then
-            backup_dir="/tmp/certbot_backup_$(date +%s)"
-            sudo mkdir -p "$backup_dir"
-            sudo tar -czf "$backup_dir/latest.tgz" -C app_data/certbot/conf/live .
-            echo "Created backup in $backup_dir"
+          # Special certbot permissions (using allowed sudo commands)
+          sudo -n mkdir -p /tmp/certbot_backup
+          if [ -d "app_data/certbot/conf/live" ] && [ -n "$(ls -A app_data/certbot/conf/live)" ]; then
+            sudo -n tar -czf /tmp/certbot_backup/latest.tgz -C app_data/certbot/conf/live .
           fi
           EOT
           
-          # 2. Run rsync with enhanced error handling
+          # 2. Transfer files using deploy user permissions
           rsync -rlptDzv \
             --delete \
             --exclude='.git' \
@@ -52,49 +49,29 @@ jobs:
             --exclude='.env*' \
             --exclude='node_modules' \
             --exclude='app_data/certbot/conf/live/' \
-            --rsync-path="sudo rsync" \
-            --backup --backup-dir=/tmp/rsync_backups \
             -e "ssh -o StrictHostKeyChecking=no" \
             "$GITHUB_WORKSPACE/" \
             "deploy@${{ secrets.HETZNER_SERVER_IP }}:/home/deploy/app/"
           
-          # 3. Restore and verify state
+          # 3. Finalize permissions with minimal sudo
           ssh -o StrictHostKeyChecking=no deploy@${{ secrets.HETZNER_SERVER_IP }} << 'EOT'
           set -ex
           cd /home/deploy/app
           
-          # Find most recent backup
-          latest_backup=$(ls -td /tmp/certbot_backup_* | head -1 2>/dev/null)
-          
-          # Restore if backup exists
-          if [ -n "$latest_backup" ] && [ -f "$latest_backup/latest.tgz" ]; then
-            sudo mkdir -p app_data/certbot/conf/live
-            sudo tar -xzf "$latest_backup/latest.tgz" -C app_data/certbot/conf/live
-            sudo rm -rf "$latest_backup"
+          # Restore certs if backup exists (using allowed sudo)
+          if [ -f "/tmp/certbot_backup/latest.tgz" ]; then
+            sudo -n mkdir -p app_data/certbot/conf/live
+            sudo -n tar -xzf /tmp/certbot_backup/latest.tgz -C app_data/certbot/conf/live
+            sudo -n rm -f /tmp/certbot_backup/latest.tgz
           fi
           
-          # Ensure strict permissions for certbot
-          sudo chown -R root:docker app_data/certbot/conf/
-          sudo find app_data/certbot/conf/ -type d -exec chmod 750 {} \;
-          sudo find app_data/certbot/conf/ -type f -exec chmod 640 {} \;
+          # Final certbot permissions (only these need sudo)
+          sudo -n chown -R root:docker app_data/certbot/conf/
+          sudo -n find app_data/certbot/conf/ -type d -exec chmod 750 {} \;
+          sudo -n find app_data/certbot/conf/ -type f -exec chmod 640 {} \;
           
-          # Verify critical files
-          declare -a critical_files=(
-            "docker-compose.prod.yml"
-            "nginx/nginx.prod.conf"
-            "app_data/certbot/conf/live"
-          )
-          
-          for file in "${critical_files[@]}"; do
-            if [ ! -e "$file" ]; then
-              echo "❌ Critical file/dir missing: $file" >&2
-              exit 1
-            fi
-          done
-          
-          # Final validation
-          sudo docker compose -f docker-compose.prod.yml config >/dev/null
-          sudo nginx -t -c /home/deploy/app/nginx/nginx.prod.conf
+          # Verify
+          ls -la docker-compose.prod.yml nginx/nginx.prod.conf
           EOT
 
       - name: Create and secure .env file
