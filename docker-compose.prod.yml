@@ -118,6 +118,7 @@ services:
       - backend
       - frontend
       - certbot
+    restart: unless-stopped
     networks:
       - app-network
 
