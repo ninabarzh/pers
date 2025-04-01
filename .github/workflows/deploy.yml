@@ -135,15 +135,40 @@ jobs:
       - name: Set up SSL certificates
         run: |
           ssh -T -o StrictHostKeyChecking=no deploy@${{ secrets.HETZNER_SERVER_IP }} << 'EOT'
-          set -e
+          set -ex
           cd /home/deploy/app
           
-          # Stop nginx to free port 80
+          # 1. Verify domain points to this server
+          echo "Verifying DNS records..."
+          current_ip=$(curl -s ifconfig.me)
+          domain_ip=$(dig +short ${{ secrets.PROD_DOMAIN }} | tail -n1)
+          if [ "$current_ip" != "$domain_ip" ]; then
+            echo "❌ DNS mismatch! ${{ secrets.PROD_DOMAIN }} points to $domain_ip but server IP is $current_ip"
+            exit 1
+          fi
+          
+          # 2. Ensure port 80 is open in firewall
+          echo "Checking firewall..."
+          sudo ufw allow 80/tcp || true
+          sudo ufw allow 443/tcp || true
+          
+          # 3. Stop anything using port 80
+          echo "Freeing port 80..."
           docker compose -f docker-compose.prod.yml stop nginx || true
-          sudo pkill -f ':80' || true
+          sudo pkill -f 'nginx|apache|httpd' || true
+          sudo ss -tulpn | grep ':80' || echo "Port 80 is free"
           sleep 2
           
-          # Run Certbot
+          # 4. Temporarily allow HTTP traffic in Hetzner Cloud firewall
+          echo "Checking Hetzner Cloud firewall..."
+          if command -v hcloud >/dev/null; then
+            hcloud firewall list
+            hcloud firewall add-rule <your-firewall-name> --direction in --protocol tcp --port 80 --source-ips 0.0.0.0/0 || true
+            hcloud firewall add-rule <your-firewall-name> --direction in --protocol tcp --port 443 --source-ips 0.0.0.0/0 || true
+          fi
+          
+          # 5. Run Certbot with extended debugging
+          echo "Running Certbot..."
           docker compose -f docker-compose.prod.yml run --rm --service-ports certbot \
             certonly \
             --standalone \
@@ -153,16 +178,26 @@ jobs:
             -d ${{ secrets.PROD_DOMAIN }} \
             -d www.${{ secrets.PROD_DOMAIN }} \
             --preferred-challenges http \
-            --http-01-port 80
+            --http-01-port 80 \
+            --debug-challenges
           
-          # Restart services
-          docker compose -f docker-compose.prod.yml up -d
-          
-          # Verify certificates
+          # 6. Verify certificates were obtained
           if [ ! -f "/home/deploy/app_data/certbot/conf/live/${{ secrets.PROD_DOMAIN }}/fullchain.pem" ]; then
-            echo "❌ Certificate missing!"
+            echo "❌ Certificate generation failed!"
+            echo "Checking Certbot logs..."
+            docker compose -f docker-compose.prod.yml logs certbot
             exit 1
           fi
+          
+          # 7. Restart services
+          echo "Restarting services..."
+          docker compose -f docker-compose.prod.yml up -d
+          
+          # 8. Final verification
+          echo "=== Certificate Verification ==="
+          sudo ls -la /home/deploy/app_data/certbot/conf/live/${{ secrets.PROD_DOMAIN }}/
+          echo "Testing HTTPS access..."
+          curl -Isk https://${{ secrets.PROD_DOMAIN }} | head -n 5
           EOT
 
       - name: Verify deployment
