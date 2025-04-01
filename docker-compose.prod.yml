@@ -105,12 +105,12 @@ services:
     # production server deploy:docker UID/GID
     user: "1001:1001"
     volumes:
-      - ./nginx/nginx.prod.conf:/etc/nginx/nginx.conf
-      - ./nginx/snippets:/etc/nginx/snippets
+      - ./nginx/nginx.prod.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/snippets:/etc/nginx/snippets:ro
       - ./nginx/config/dhparam:/etc/nginx/dhparam:ro
-      - static_volume:/var/www/static
-      - certbot_www:/var/www/certbot
-      - certbot_conf:/etc/letsencrypt
+      - static_volume:/var/www/static:ro
+      - certbot_www:/var/www/certbot:ro
+      - certbot_conf:/etc/letsencrypt:ro
     ports:
       - "80:80"
       - "443:443"

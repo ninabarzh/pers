@@ -98,6 +98,23 @@ jobs:
           fi
           EOT
 
+      - name: Install brotli for nginx
+        run: |
+          ssh -T -o StrictHostKeyChecking=no deploy@${{ secrets.HETZNER_SERVER_IP }} << 'EOT'
+          set -e
+          # Install brotli module for nginx
+          sudo apt-get update
+          sudo apt-get install -y brotli libnginx-mod-brotli
+          EOT
+
+      - name: Ensure nginx directories exist
+        run: |
+          ssh -T -o StrictHostKeyChecking=no deploy@${{ secrets.HETZNER_SERVER_IP }} << 'EOT'
+          set -e
+          sudo mkdir -p /home/deploy/app/nginx/{config/dhparam,snippets}
+          sudo chown -R deploy:docker /home/deploy/app/nginx
+          EOT
+
       - name: Deploy services with proper dependency handling
         run: |
           ssh -T -o StrictHostKeyChecking=no deploy@${{ secrets.HETZNER_SERVER_IP }} << 'EOT'
@@ -153,47 +170,26 @@ jobs:
           docker compose -f docker-compose.prod.yml ps
           EOT
 
-      - name: Set up SSL certificates (hetzner firewall was blocking)
+      - name: Set up SSL certificates
         run: |
           ssh -T -o StrictHostKeyChecking=no deploy@${{ secrets.HETZNER_SERVER_IP }} << 'EOT'
           set -ex
           cd /home/deploy/app
 
-          # 1. Network configuration
-          echo "Configuring network preferences..."
-          echo 'precedence ::ffff:0:0/96  100' | sudo -S tee -a /etc/gai.conf >/dev/null || true
-
-          # 2. DNS verification (IPv4 only)
-          echo "Verifying DNS records..."
-          PUBLIC_IP=$(curl -4 -s ifconfig.me)
-          DOMAIN_IP=$(dig +short A ${{ secrets.PROD_DOMAIN }} | tail -n1)
-          
-          if [ "$PUBLIC_IP" != "$DOMAIN_IP" ]; then
-            echo "❌ DNS mismatch! ${{ secrets.PROD_DOMAIN }} points to $DOMAIN_IP but server IP is $PUBLIC_IP"
-            exit 1
-          fi
-
-          # 3. Port 80 accessibility check (non-sudo)
-          echo "Testing port 80 access..."
-          if ! timeout 3 bash -c "</dev/tcp/$PUBLIC_IP/80"; then
-            echo "❌ Port 80 not accessible!"
-            echo "Debug information:"
-            echo "1. Please check Hetzner Cloud Firewall rules in web console"
-            echo "2. Verify these commands on server:"
-            echo "   sudo ufw status"
-            echo "   sudo iptables -L -n"
-            echo "   sudo ss -tulnp | grep ':80'"
-            exit 1
-          fi
-
-          # 4. Free port 80
-          echo "Stopping services using port 80..."
+          # 1. Stop nginx if running
           sudo docker compose -f docker-compose.prod.yml stop nginx || true
           sudo pkill -f 'nginx|apache|httpd' || true
           sleep 3
 
-          # 5. Run Certbot with host networking
-          echo "Running Certbot..."
+          # 2. Verify port 80 is accessible
+          PUBLIC_IP=$(curl -4 -s ifconfig.me)
+          if ! timeout 3 bash -c "</dev/tcp/$PUBLIC_IP/80"; then
+            echo "❌ Port 80 not accessible!"
+            echo "Please check Hetzner Cloud Firewall rules"
+            exit 1
+          fi
+
+          # 3. Run Certbot with host networking
           MAX_RETRIES=3
           for i in $(seq 1 $MAX_RETRIES); do
             sudo docker compose -f docker-compose.prod.yml run --rm \
@@ -216,20 +212,14 @@ jobs:
               sleep 10
             else
               echo "❌ Certbot failed after $MAX_RETRIES attempts"
-              echo "Debug info:"
-              sudo docker compose -f docker-compose.prod.yml logs certbot || true
               exit 1
             fi
           done
 
-          # 6. Finalize setup
-          echo "Finalizing SSL setup..."
+          # 4. Restart services
           sudo docker compose -f docker-compose.prod.yml up -d
           
           echo "✅ SSL setup completed successfully!"
-          echo "Testing HTTPS access (may take 1-2 minutes to propagate)..."
-          sleep 30
-          curl -Isk https://${{ secrets.PROD_DOMAIN }} | head -n 5 || echo "HTTPS test failed - certificates may need more time to propagate"
           EOT
 
       - name: Verify deployment
