@@ -35,28 +35,29 @@ RUN apt-get update && \
     brotli && \
     rm -rf /var/lib/apt/lists/*
 
+# Create docker group and deploy user (matches host)
+RUN groupadd -g 1001 docker && \
+    useradd -u 1001 -g docker -m deploy -d /app
+
 # Copy virtual environment
 COPY --from=builder /opt/venv /opt/venv
 
-# Copy application code
-COPY --from=builder --chown=1000:1000 /app/src/ ./src/
-RUN chmod -R 555 ./src  # Read+execute only
+# Copy application code with correct ownership
+COPY --from=builder --chown=deploy:docker /app/src/ ./src/
+RUN chmod -R 550 ./src  # Read+execute for owner/group
 
 # Static files setup
 RUN mkdir -p /var/www/static && \
     cp -r src/app/static/* /var/www/static/ && \
-    chmod -R 755 /var/www/static
-
-# Non-root user
-RUN useradd -u 1000 -m myuser -d /app && \
-    chown -R myuser:myuser /app /var/www/static
+    chown -R deploy:docker /var/www/static && \
+    chmod -R 750 /var/www/static  # Owner/group can write
 
 # Environment configuration
 ENV PATH="/opt/venv/bin:$PATH" \
     PYTHONPATH="/app/src" \
     PYTHONUNBUFFERED="1"
 
-USER myuser
+USER deploy:docker
 
 HEALTHCHECK --interval=30s --timeout=10s \
     CMD curl -f http://localhost:8001/health || exit 1

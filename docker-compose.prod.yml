@@ -57,7 +57,7 @@ services:
     volumes:
       - /home/deploy/app/.env:/app/.env:ro  # Mount the env file
       - static_volume:/app/src/static # Mount static files
-    user: "myuser"
+    user: "deploy:docker"
     deploy:
       resources:
         limits:
@@ -152,4 +152,6 @@ volumes:
 
 networks:
   app-network:
+    name: app-network
     driver: bridge
+    attachable: true

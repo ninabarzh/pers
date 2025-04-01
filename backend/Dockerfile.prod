@@ -45,8 +45,9 @@ COPY --from=builder --chown=1000:1000 /app/src/ ./src/
 RUN chmod -R 555 ./src  # Read+execute only
 
 # Non-root user setup
-RUN useradd -u 1000 -m myuser -d /app && \
-    chown -R myuser:myuser /app
+RUN groupadd -g 1001 docker && \
+    useradd -u 1001 -g docker -m deploy -d /app && \
+    chown -R deploy:docker /app
 
 # Environment configuration
 ENV PATH="/opt/venv/bin:$PATH" \
@@ -54,7 +55,7 @@ ENV PATH="/opt/venv/bin:$PATH" \
     PYTHONUNBUFFERED="1" \
     STARTUP_DELAY="10"
 
-USER myuser
+USER deploy:docker
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
     CMD curl -f http://localhost:8000/health || exit 1
