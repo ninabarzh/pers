@@ -19,27 +19,27 @@ jobs:
         with:
           ssh-private-key: ${{ secrets.HETZNER_SSH_KEY }}
 
-      - name: Transfer files to server
+      - name: Transfer files and setup SSL
         run: |
-          # 1. Prepare environment with sudo commands
           ssh -o StrictHostKeyChecking=no deploy@${{ secrets.HETZNER_SERVER_IP }} << 'EOT'
           set -ex
           cd /home/deploy/app
-          
-          # Create directories (using whitelisted sudo commands)
+      
+          # 1. Prepare directory structure
           sudo mkdir -p app_data/certbot/{conf/live,www}
           sudo chown -R deploy:docker app_data/
           sudo find app_data/ -type d -exec chmod 775 {} \;
           sudo find app_data/ -type f -exec chmod 664 {} \;
-          
-          # Backup certs
+      
+          # 2. Backup existing certs if they exist
           if [ -d "app_data/certbot/conf/live" ] && [ -n "$(ls -A app_data/certbot/conf/live)" ]; then
-            sudo mkdir -p /tmp/certbot_backup
-            sudo tar -czf /tmp/certbot_backup/latest.tgz -C app_data/certbot/conf/live .
+            backup_dir="/tmp/certbot_backup_$(date +%s)"
+            sudo mkdir -p "$backup_dir"
+            sudo tar -czf "$backup_dir/latest.tgz" -C app_data/certbot/conf/live .
           fi
           EOT
-          
-          # 2. Transfer files
+      
+          # 3. Transfer files (preserve certbot config)
           rsync -rlptDzv \
             --delete \
             --exclude='.git' \
@@ -50,26 +50,50 @@ jobs:
             -e "ssh -o StrictHostKeyChecking=no" \
             "$GITHUB_WORKSPACE/" \
             "deploy@${{ secrets.HETZNER_SERVER_IP }}:/home/deploy/app/"
-          
-          # 3. Finalize with sudo commands
+      
+          # 4. SSL Certificate Setup
           ssh -o StrictHostKeyChecking=no deploy@${{ secrets.HETZNER_SERVER_IP }} << 'EOT'
           set -ex
           cd /home/deploy/app
-          
-          # Restore certs
-          if [ -f "/tmp/certbot_backup/latest.tgz" ]; then
+      
+          # Restore certs if backup exists
+          latest_backup=$(ls -td /tmp/certbot_backup_* | head -1 2>/dev/null)
+          if [ -n "$latest_backup" ] && [ -f "$latest_backup/latest.tgz" ]; then
             sudo mkdir -p app_data/certbot/conf/live
-            sudo tar -xzf /tmp/certbot_backup/latest.tgz -C app_data/certbot/conf/live
-            sudo rm -f /tmp/certbot_backup/latest.tgz
+            sudo tar -xzf "$latest_backup/latest.tgz" -C app_data/certbot/conf/live
+            sudo rm -rf "$latest_backup"
           fi
-          
-          # Critical: Set certbot permissions
+      
+          # Stop services and free port 80
+          sudo docker compose -f docker-compose.prod.yml stop nginx || true
+          sudo pkill -f ':80' || true
+          sleep 2  # Ensure ports are released
+      
+          # Run Certbot (standalone mode)
+          sudo docker compose -f docker-compose.prod.yml run --rm \
+            --service-ports certbot \
+            certonly \
+            --standalone \
+            --non-interactive \
+            --agree-tos \
+            --email ${{ secrets.PROD_EMAIL }} \
+            -d ${{ secrets.PROD_DOMAIN }} \
+            -d www.${{ secrets.PROD_DOMAIN }} \
+            --preferred-challenges http \
+            --http-01-port 80 \
+            --debug-challenges
+      
+          # Set final permissions
           sudo chown -R root:docker app_data/certbot/conf/
           sudo find app_data/certbot/conf/ -type d -exec chmod 750 {} \;
           sudo find app_data/certbot/conf/ -type f -exec chmod 640 {} \;
-          
+      
+          # Restart services
+          sudo docker compose -f docker-compose.prod.yml up -d
+      
           # Verify
-          ls -la docker-compose.prod.yml nginx/nginx.prod.conf
+          sudo ls -la app_data/certbot/conf/live/
+          curl -I https://${{ secrets.PROD_DOMAIN }}
           EOT
 
       - name: Create and secure .env file
