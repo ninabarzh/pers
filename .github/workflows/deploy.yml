@@ -98,15 +98,6 @@ jobs:
           fi
           EOT
 
-      - name: Install brotli for nginx
-        run: |
-          ssh -T -o StrictHostKeyChecking=no deploy@${{ secrets.HETZNER_SERVER_IP }} << 'EOT'
-          set -e
-          # Install brotli module for nginx (using passwordless sudo)
-          sudo -S apt-get update -qq
-          sudo -S apt-get install -y brotli libnginx-mod-brotli
-          EOT
-
       - name: Ensure nginx directories exist
         run: |
           ssh -T -o StrictHostKeyChecking=no deploy@${{ secrets.HETZNER_SERVER_IP }} << 'EOT'
@@ -120,6 +111,9 @@ jobs:
           ssh -T -o StrictHostKeyChecking=no deploy@${{ secrets.HETZNER_SERVER_IP }} << 'EOT'
           set -e
           cd /home/deploy/app
+          
+          # Explicitly build NGINX first
+          docker compose -f docker-compose.prod.yml build nginx
           
           # Clean up previous deployment
           docker compose -f docker-compose.prod.yml down -v || true
@@ -168,6 +162,12 @@ jobs:
           
           echo "=== Deployment Status ==="
           docker compose -f docker-compose.prod.yml ps
+          EOT
+
+      - name: Verify Brotli
+        run: |
+          ssh -T deploy@${{ secrets.HETZNER_SERVER_IP }} << 'EOT'
+          docker compose -f docker-compose.prod.yml exec nginx nginx -T 2>&1 | grep brotli
           EOT
 
       - name: Set up SSL certificates
@@ -236,4 +236,10 @@ jobs:
           
           echo "\n=== HTTPS Test ==="
           curl -Isk https://${{ secrets.PROD_DOMAIN }} | head -n 5
+          EOT
+
+      - name: Prune unused Docker objects
+        run: |
+          ssh -T deploy@${{ secrets.HETZNER_SERVER_IP }} << 'EOT'
+          docker system prune -af --volumes
           EOT

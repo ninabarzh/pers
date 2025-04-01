@@ -1,0 +1,11 @@
+FROM nginx:1.25-alpine
+
+# Install Brotli dynamically loaded module
+RUN apk add --no-cache brotli-libs && \
+    mkdir -p /etc/nginx/modules && \
+    echo "load_module /usr/lib/nginx/modules/ngx_http_brotli_filter_module.so;" > /etc/nginx/modules/brotli.conf && \
+    echo "load_module /usr/lib/nginx/modules/ngx_http_brotli_static_module.so;" >> /etc/nginx/modules/brotli.conf
+
+# Copy configs (preserve existing behavior)
+COPY nginx.prod.conf /etc/nginx/nginx.conf
+COPY snippets/ /etc/nginx/snippets/

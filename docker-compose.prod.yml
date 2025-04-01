@@ -101,7 +101,9 @@ services:
       - app-network
 
   nginx:
-    image: nginx:1.25-alpine
+    build:
+      context: .nginx
+      dockerfile: Dockerfile.prod
     # production server deploy:docker UID/GID
     user: "1001:1001"
     volumes:
