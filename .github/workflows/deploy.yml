@@ -28,9 +28,30 @@ jobs:
             --exclude='.env*' \
             --exclude='node_modules' \
             --exclude='app_data' \
+            --exclude='nginx/config/dhparam' \
             -e "ssh -o StrictHostKeyChecking=no" \
             "$GITHUB_WORKSPACE/" \
             "deploy@${{ secrets.HETZNER_SERVER_IP }}:/home/deploy/app/"
+
+      - name: Handle DH params
+        run: |
+          ssh -T -o StrictHostKeyChecking=no deploy@${{ secrets.HETZNER_SERVER_IP }} << 'EOT'
+          set -e
+          cd /home/deploy/app
+          
+          # Create directory if it doesn't exist
+          sudo mkdir -p nginx/config/dhparam
+          sudo chown deploy:docker nginx/config/dhparam
+          
+          # Generate DH params if missing
+          if [ ! -f "nginx/config/dhparam/dhparam.pem" ]; then
+            sudo openssl dhparam -out nginx/config/dhparam/dhparam.pem 2048
+            sudo chown deploy:docker nginx/config/dhparam/dhparam.pem
+          fi
+          
+          # Set proper permissions
+          sudo chmod 644 nginx/config/dhparam/dhparam.pem
+          EOT
 
       - name: Create and secure .env file
         run: |
