@@ -19,82 +19,19 @@ jobs:
         with:
           ssh-private-key: ${{ secrets.HETZNER_SSH_KEY }}
 
-      - name: Transfer files and setup SSL
+      - name: Transfer files to server
         run: |
-          ssh -o StrictHostKeyChecking=no deploy@${{ secrets.HETZNER_SERVER_IP }} << 'EOT'
-          set -ex
-          cd /home/deploy/app
-      
-          # 1. Prepare directory structure
-          sudo mkdir -p app_data/certbot/{conf/live,www}
-          sudo chown -R deploy:docker app_data/
-          sudo find app_data/ -type d -exec chmod 775 {} \;
-          sudo find app_data/ -type f -exec chmod 664 {} \;
-      
-          # 2. Backup existing certs if they exist
-          if [ -d "app_data/certbot/conf/live" ] && [ -n "$(ls -A app_data/certbot/conf/live)" ]; then
-            backup_dir="/tmp/certbot_backup_$(date +%s)"
-            sudo mkdir -p "$backup_dir"
-            sudo tar -czf "$backup_dir/latest.tgz" -C app_data/certbot/conf/live .
-          fi
-          EOT
-      
-          # 3. Transfer files (preserve certbot config)
+          # Transfer files (excluding sensitive/unnecessary files)
           rsync -rlptDzv \
             --delete \
             --exclude='.git' \
             --exclude='.github' \
             --exclude='.env*' \
             --exclude='node_modules' \
-            --exclude='app_data/certbot/conf/live/' \
+            --exclude='app_data' \
             -e "ssh -o StrictHostKeyChecking=no" \
             "$GITHUB_WORKSPACE/" \
             "deploy@${{ secrets.HETZNER_SERVER_IP }}:/home/deploy/app/"
-      
-          # 4. SSL Certificate Setup
-          ssh -o StrictHostKeyChecking=no deploy@${{ secrets.HETZNER_SERVER_IP }} << 'EOT'
-          set -ex
-          cd /home/deploy/app
-      
-          # Restore certs if backup exists
-          latest_backup=$(ls -td /tmp/certbot_backup_* | head -1 2>/dev/null)
-          if [ -n "$latest_backup" ] && [ -f "$latest_backup/latest.tgz" ]; then
-            sudo mkdir -p app_data/certbot/conf/live
-            sudo tar -xzf "$latest_backup/latest.tgz" -C app_data/certbot/conf/live
-            sudo rm -rf "$latest_backup"
-          fi
-      
-          # Stop services and free port 80
-          sudo docker compose -f docker-compose.prod.yml stop nginx || true
-          sudo pkill -f ':80' || true
-          sleep 2  # Ensure ports are released
-      
-          # Run Certbot (standalone mode)
-          sudo docker compose -f docker-compose.prod.yml run --rm \
-            --service-ports certbot \
-            certonly \
-            --standalone \
-            --non-interactive \
-            --agree-tos \
-            --email ${{ secrets.PROD_EMAIL }} \
-            -d ${{ secrets.PROD_DOMAIN }} \
-            -d www.${{ secrets.PROD_DOMAIN }} \
-            --preferred-challenges http \
-            --http-01-port 80 \
-            --debug-challenges
-      
-          # Set final permissions
-          sudo chown -R root:docker app_data/certbot/conf/
-          sudo find app_data/certbot/conf/ -type d -exec chmod 750 {} \;
-          sudo find app_data/certbot/conf/ -type f -exec chmod 640 {} \;
-      
-          # Restart services
-          sudo docker compose -f docker-compose.prod.yml up -d
-      
-          # Verify
-          sudo ls -la app_data/certbot/conf/live/
-          curl -I https://${{ secrets.PROD_DOMAIN }}
-          EOT
 
       - name: Create and secure .env file
         run: |
@@ -137,17 +74,14 @@ jobs:
           cd /home/deploy/app
 
           # Create required directories
-          sudo mkdir -p /home/deploy/app_data/{typesense,static,certbot}
+          sudo mkdir -p /home/deploy/app_data/{typesense,static,certbot/conf/live}
           sudo mkdir -p /home/deploy/app/nginx/config/dhparam
-          sudo mkdir -p /data/static
 
           # Set ownership and permissions
           sudo chown -R deploy:docker /home/deploy/app_data
           sudo chmod -R 775 /home/deploy/app_data
           sudo chown -R deploy:docker /home/deploy/app/nginx
           sudo chmod -R 775 /home/deploy/app/nginx
-          sudo chown -R deploy:docker /data/static
-          sudo chmod -R 775 /data/static
 
           # Generate DH params if missing
           if [ ! -f "/home/deploy/app/nginx/config/dhparam/dhparam.pem" ]; then
@@ -156,22 +90,17 @@ jobs:
           fi
           EOT
 
-      - name: Initial deployment without certbot
+      - name: Deploy services
         run: |
           ssh -T -o StrictHostKeyChecking=no deploy@${{ secrets.HETZNER_SERVER_IP }} << 'EOT'
           set -e
           cd /home/deploy/app
-      
-          # Clean up previous deployment
+          
+          # Stop and remove existing containers
           docker compose -f docker-compose.prod.yml down -v || true
           
-          # Set proper permissions
-          sudo chmod 640 /home/deploy/app/.env
-          sudo chown deploy:docker /home/deploy/app/.env
-          
-          # Start Typesense first (with health check)
-          echo "Starting Typesense..."
-          docker compose -f docker-compose.prod.yml up -d --build typesense
+          # Build and start services
+          docker compose -f docker-compose.prod.yml up -d --build
           
           # Wait for Typesense to become healthy
           echo "Waiting for Typesense to become healthy..."
@@ -180,48 +109,28 @@ jobs:
             echo "Waiting for Typesense..."
           done'
           
-          # Start backend
-          echo "Starting Backend..."
-          docker compose -f docker-compose.prod.yml up -d --build backend
-
           # Wait for backend to become healthy
           echo "Waiting for backend to become healthy..."
           timeout 300s bash -c 'until docker compose -f docker-compose.prod.yml exec backend curl -sf http://localhost:8000/health; do
             sleep 5
             echo "Waiting for backend..."
           done'
-
-          # Start all remaining services
-          echo "Starting all services..."
-          docker compose -f docker-compose.prod.yml up -d --build
-          
-          # Verify all services are up
-          echo "=== Deployment Status ==="
-          docker compose -f docker-compose.prod.yml ps
           EOT
 
       - name: Set up SSL certificates
         run: |
           ssh -T -o StrictHostKeyChecking=no deploy@${{ secrets.HETZNER_SERVER_IP }} << 'EOT'
-          set -ex
+          set -e
           cd /home/deploy/app
-      
-          # 1. PREPARE ENVIRONMENT
-          # Ensure Docker access
-          sudo chown root:docker /var/run/docker.sock
-          sudo chmod 660 /var/run/docker.sock
-      
-          # 2. STOP SERVICES
-          # Stop only what's needed for SSL
+          
+          # Stop nginx to free port 80
           docker compose -f docker-compose.prod.yml stop nginx || true
-      
-          # 3. FREE PORT 80
-          # More thorough than before but still minimal
-          sudo ss -tulpn | grep ':80' || echo "Port 80 available"
-          sudo pkill -9 -f 'nginx|apache|httpd' || true
-      
-          # 4. OBTAIN CERTIFICATES
-          # Single attempt with clear error (no retry loop)
+          
+          # Kill any processes using port 80
+          sudo pkill -f ':80' || true
+          sleep 2
+          
+          # Run Certbot to obtain certificates
           docker compose -f docker-compose.prod.yml run --rm --service-ports certbot \
             certonly \
             --standalone \
@@ -232,19 +141,15 @@ jobs:
             -d www.${{ secrets.PROD_DOMAIN }} \
             --preferred-challenges http \
             --http-01-port 80
-      
-          # 5. VERIFY SUCCESS
-          sudo ls -la /home/deploy/app_data/certbot/conf/live/${{ secrets.PROD_DOMAIN }}/
+          
+          # Restart services
+          docker compose -f docker-compose.prod.yml up -d
+          
+          # Verify certificates
           [ -f "/home/deploy/app_data/certbot/conf/live/${{ secrets.PROD_DOMAIN }}/fullchain.pem" ] || {
             echo "❌ Certificate missing!"
             exit 1
           }
-      
-          # 6. RESTART SERVICES
-          docker compose -f docker-compose.prod.yml up -d --force-recreate
-      
-          # 7. FINAL CHECK
-          docker compose -f docker-compose.prod.yml exec nginx nginx -t
           EOT
 
       - name: Verify deployment
