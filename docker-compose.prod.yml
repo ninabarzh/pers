@@ -117,7 +117,15 @@ services:
     depends_on:
       - backend
       - frontend
-      - certbot
+    # Ensure certs exist
+    command: >
+      sh -c '
+      if [ -f "/etc/letsencrypt/live/$${DOMAIN}/fullchain.pem" ]; then
+        exec nginx -g "daemon off;";
+      else
+        echo "ERROR: SSL certificates missing!";
+        exit 1;
+      fi'
     restart: unless-stopped
     networks:
       - app-network
@@ -125,17 +133,24 @@ services:
   certbot:
     image: certbot/certbot:latest
     volumes:
-      - ./app_data/certbot/www:/var/www/certbot
-      - ./app_data/certbot/conf:/etc/letsencrypt
+      - certbot_www:/var/www/certbot:ro  # For ACME challenges (read-only)
+      - certbot_conf:/etc/letsencrypt:ro # For certificates (read-only)
     entrypoint: "/bin/sh -c"
     command: |
       "trap exit TERM; while :; do 
         certbot renew --webroot -w /var/www/certbot; 
         sleep 12h & wait $$!; 
       done"
+    healthcheck:
+      test: ["CMD-SHELL", "certbot certificates --noninteractive || exit 1"]
+      interval: 1h
+      timeout: 10s
+      retries: 3
     restart: unless-stopped
     networks:
-      - app-network
+      app-network:
+        aliases:
+          - certbot
 
 volumes:
   typesense_data:
