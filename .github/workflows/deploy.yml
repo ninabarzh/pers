@@ -21,7 +21,6 @@ jobs:
 
       - name: Transfer files to server
         run: |
-          # Transfer files (excluding sensitive/unnecessary files)
           rsync -rlptDzv \
             --delete \
             --exclude='.git' \
@@ -39,30 +38,24 @@ jobs:
           set -e
           cd /home/deploy/app
 
-          # Create .env file with secrets
           cat <<EOF > .env
-          # Application Configuration
           DOMAIN=${{ secrets.PROD_DOMAIN }}
           DEBUG=false
           ENV=production
           EMAIL=${{ secrets.PROD_EMAIL }}
 
-          # Typesense Configuration
           TYPESENSE_API_KEY=${{ secrets.PROD_TYPESENSE_API_KEY }}
           TYPESENSE_HOST=typesense
           TYPESENSE_PORT=8108
           TYPESENSE_PROTOCOL=http
           TYPESENSE_DATA_DIR=/home/deploy/app_data/typesense
 
-          # Port Configuration
           PROD_BACKEND_PORT=8000
           PROD_FRONTEND_PORT=8001
 
-          # Startup Settings
           BACKEND_STARTUP_DELAY=30
           EOF
 
-          # Set secure permissions
           chmod 640 .env
           chown deploy:docker .env
           EOT
@@ -73,48 +66,70 @@ jobs:
           set -e
           cd /home/deploy/app
 
-          # Create required directories
           sudo mkdir -p /home/deploy/app_data/{typesense,static,certbot/conf/live}
           sudo mkdir -p /home/deploy/app/nginx/config/dhparam
-
-          # Set ownership and permissions
           sudo chown -R deploy:docker /home/deploy/app_data
           sudo chmod -R 775 /home/deploy/app_data
-          sudo chown -R deploy:docker /home/deploy/app/nginx
-          sudo chmod -R 775 /home/deploy/app/nginx
 
-          # Generate DH params if missing
           if [ ! -f "/home/deploy/app/nginx/config/dhparam/dhparam.pem" ]; then
             sudo openssl dhparam -out /home/deploy/app/nginx/config/dhparam/dhparam.pem 2048
             sudo chown deploy:docker /home/deploy/app/nginx/config/dhparam/dhparam.pem
           fi
           EOT
 
-      - name: Deploy services
+      - name: Deploy services with proper dependency handling
         run: |
           ssh -T -o StrictHostKeyChecking=no deploy@${{ secrets.HETZNER_SERVER_IP }} << 'EOT'
           set -e
           cd /home/deploy/app
           
-          # Stop and remove existing containers
+          # Clean up previous deployment
           docker compose -f docker-compose.prod.yml down -v || true
           
-          # Build and start services
-          docker compose -f docker-compose.prod.yml up -d --build
+          # Start Typesense first with health check
+          echo "Starting Typesense..."
+          docker compose -f docker-compose.prod.yml up -d --build typesense
           
-          # Wait for Typesense to become healthy
+          # Extended wait for Typesense with retries
           echo "Waiting for Typesense to become healthy..."
-          timeout 300s bash -c 'until docker compose -f docker-compose.prod.yml exec typesense curl -sf http://localhost:8108/health; do
-            sleep 5
-            echo "Waiting for Typesense..."
-          done'
+          for i in {1..10}; do
+            if docker compose -f docker-compose.prod.yml exec typesense curl -sf http://localhost:8108/health; then
+              echo "Typesense is healthy!"
+              break
+            fi
+            echo "Attempt $i/10 - Typesense not ready yet..."
+            sleep 10
+            if [ $i -eq 10 ]; then
+              echo "Typesense failed to become healthy"
+              exit 1
+            fi
+          done
           
-          # Wait for backend to become healthy
+          # Start backend with extended health check
+          echo "Starting Backend..."
+          docker compose -f docker-compose.prod.yml up -d --build backend
+          
           echo "Waiting for backend to become healthy..."
-          timeout 300s bash -c 'until docker compose -f docker-compose.prod.yml exec backend curl -sf http://localhost:8000/health; do
-            sleep 5
-            echo "Waiting for backend..."
-          done'
+          for i in {1..15}; do
+            if docker compose -f docker-compose.prod.yml exec backend curl -sf http://localhost:8000/health; then
+              echo "Backend is healthy!"
+              break
+            fi
+            echo "Attempt $i/15 - Backend not ready yet..."
+            sleep 10
+            if [ $i -eq 15 ]; then
+              echo "Backend failed to become healthy"
+              docker compose -f docker-compose.prod.yml logs backend
+              exit 1
+            fi
+          done
+          
+          # Start remaining services
+          echo "Starting all remaining services..."
+          docker compose -f docker-compose.prod.yml up -d
+          
+          echo "=== Deployment Status ==="
+          docker compose -f docker-compose.prod.yml ps
           EOT
 
       - name: Set up SSL certificates
@@ -125,12 +140,10 @@ jobs:
           
           # Stop nginx to free port 80
           docker compose -f docker-compose.prod.yml stop nginx || true
-          
-          # Kill any processes using port 80
           sudo pkill -f ':80' || true
           sleep 2
           
-          # Run Certbot to obtain certificates
+          # Run Certbot
           docker compose -f docker-compose.prod.yml run --rm --service-ports certbot \
             certonly \
             --standalone \
@@ -146,10 +159,10 @@ jobs:
           docker compose -f docker-compose.prod.yml up -d
           
           # Verify certificates
-          [ -f "/home/deploy/app_data/certbot/conf/live/${{ secrets.PROD_DOMAIN }}/fullchain.pem" ] || {
+          if [ ! -f "/home/deploy/app_data/certbot/conf/live/${{ secrets.PROD_DOMAIN }}/fullchain.pem" ]; then
             echo "❌ Certificate missing!"
             exit 1
-          }
+          fi
           EOT
 
       - name: Verify deployment
