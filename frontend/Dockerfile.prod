@@ -18,9 +18,13 @@ ENV PATH="/opt/venv/bin:$PATH"
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy and process static files
+# Copy application code
 COPY . .
-RUN find src/app/static/ -type f \( -name "*.css" -o -name "*.js" \) \
+
+# Process static files
+RUN mkdir -p /var/www/static && \
+    cp -r src/app/static/* /var/www/static/ && \
+    find /var/www/static -type f \( -name "*.css" -o -name "*.js" \) \
     -exec gzip -9 -k {} \;
 
 # Stage 2: Runtime
@@ -35,18 +39,16 @@ RUN groupadd -g 1001 docker && \
 # Copy virtual environment
 COPY --from=builder /opt/venv /opt/venv
 
+# Copy static files with correct ownership (from builder's /var/www/static)
+COPY --from=builder --chown=deploy:docker /var/www/static /var/www/static
+
 # Copy application code with correct ownership
 COPY --from=builder --chown=deploy:docker /app/src/ ./src/
 
-# Static files setup - improved
-RUN mkdir -p /var/www/static && \
-    cp -r src/app/static/* /var/www/static/ && \
-    find /var/www/static -type d -exec chmod 755 {} \; && \
+# Set permissions
+RUN find /var/www/static -type d -exec chmod 755 {} \; && \
     find /var/www/static -type f -exec chmod 644 {} \; && \
-    chown -R deploy:docker /var/www/static
-
-# Set permissions for application code
-RUN find ./src -type d -exec chmod 550 {} \; && \
+    find ./src -type d -exec chmod 550 {} \; && \
     find ./src -type f -exec chmod 440 {} \;
 
 # Environment configuration

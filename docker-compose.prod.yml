@@ -90,7 +90,9 @@ services:
       - ENV=production
       - DEBUG=false
       - FRONTEND_PORT=8001
-      - BACKEND_URL=https://${DOMAIN}  # Changed from PROD_DOMAIN to DOMAIN
+      - BACKEND_URL=https://${DOMAIN}
+    volumes:
+      - static_volume:/var/www/static
     deploy:
       resources:
         limits:
