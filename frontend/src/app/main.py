@@ -24,14 +24,15 @@ else:
     logger.warning(f"No .env file found at {env_path}")
 
 config = {
-    "PORT": int(os.getenv('PROD_FRONTEND_PORT', 8001)),
+    "PORT": int(os.getenv('FRONTEND_PORT', 8001)),
     "DEBUG": os.getenv('DEBUG', 'false').lower() in ('true', '1', 't'),
-    "STATIC_DIR": "/app/src/app/static"  # Absolute path in container
+    "STATIC_DIR": "/app/src/app/static",  # Absolute path in container
+    "BACKEND_URL": os.getenv('BACKEND_URL', 'http://localhost:8000')  # New config
 }
 
 # Check production variables are set
 if os.getenv('ENV') == 'production':
-    required_vars = ['TYPESENSE_API_KEY', 'TYPESENSE_HOST']  # Add others as needed
+    required_vars = ['BACKEND_URL']  # Only require backend URL in production
     missing = [var for var in required_vars if not os.getenv(var)]
     if missing:
         raise ValueError(f"Missing required production environment variables: {missing}")
@@ -63,7 +64,7 @@ if __name__ == "__main__":
     uvicorn.run(
         "src.app.main:app",
         host="0.0.0.0",
-        port=8000,
+        port=config["PORT"],  # Use configured port
         reload=False,
-        access_log = False
+        access_log=False
     )
