@@ -122,30 +122,6 @@ jobs:
           sudo chown -R deploy:docker /home/deploy/app/nginx
           EOT
 
-      - name: Build NGINX image
-        run: |
-          ssh -T deploy@${{ secrets.HETZNER_SERVER_IP }} << 'EOT'
-          set -ex
-          cd /home/deploy/app
-          
-          # Verify files exist first
-          echo "=== Verifying NGINX build context ==="
-          ls -la nginx/
-          
-          # Build with explicit context
-          echo "=== Building NGINX image ==="
-          docker build \
-            -f nginx/Dockerfile.prod \
-            -t your-app-nginx \
-            ./nginx
-          
-          # Tag for compose (if needed)
-          docker tag your-app-nginx your-app-nginx:latest
-          
-          echo "=== Build complete ==="
-          docker images | grep nginx
-          EOT
-
       - name: Deploy services with proper dependency handling
         run: |
           ssh -T -o StrictHostKeyChecking=no deploy@${{ secrets.HETZNER_SERVER_IP }} << 'EOT'
