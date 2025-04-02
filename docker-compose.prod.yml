@@ -113,12 +113,12 @@ services:
     # production server deploy:docker UID/GID
     user: "1001:1001"
     volumes:
+      - /home/deploy/app_data/certbot/conf:/etc/letsencrypt:ro
+      - /home/deploy/app_data/certbot/www:/var/www/certbot:ro
       - ./nginx/nginx.prod.conf:/etc/nginx/nginx.conf:ro
       - ./nginx/snippets:/etc/nginx/snippets:ro
       - ./nginx/config/dhparam:/etc/nginx/dhparam:ro
       - static_volume:/var/www/static:ro
-      - certbot_www:/var/www/certbot:ro
-      - certbot_conf:/etc/letsencrypt:ro
     ports:
       - "80:80"
       - "443:443"
@@ -126,10 +126,13 @@ services:
       - backend
       - frontend
     # Ensure certs exist
-    command: >
+    command:  >
       sh -c '
-      # Start NGINX
-      exec nginx -g "daemon off;"
+      while [ ! -f "/etc/letsencrypt/live/finder.green/fullchain.pem" ]; do
+        echo "Waiting for SSL certificates...";
+        sleep 5;
+      done;
+      nginx -t && nginx -g "daemon off;"
       '
     restart: unless-stopped
     networks:
