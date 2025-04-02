@@ -125,94 +125,65 @@ jobs:
       - name: Deploy services with proper dependency handling
         run: |
           ssh -T -o StrictHostKeyChecking=no deploy@${{ secrets.HETZNER_SERVER_IP }} << 'EOT'
-          set -e
+          set -ex  # Enable debugging and exit on error
           cd /home/deploy/app
           
-          # Clean up previous deployment
-          docker compose -f docker-compose.prod.yml down -v || true
+          # Clean up and rebuild everything
+          docker compose -f docker-compose.prod.yml down -v --remove-orphans
+          docker compose -f docker-compose.prod.yml build --no-cache
           
-          # Start Typesense first with health check
-          echo "Starting Typesense..."
-          docker compose -f docker-compose.prod.yml up -d --build typesense
-          
-          # Extended wait for Typesense with retries
-          echo "Waiting for Typesense to become healthy..."
+          # Start services in order with health checks
+          docker compose -f docker-compose.prod.yml up -d typesense
           for i in {1..10}; do
             if docker compose -f docker-compose.prod.yml exec typesense curl -sf http://localhost:8108/health; then
-              echo "Typesense is healthy!"
+              echo "Typesense ready"
               break
             fi
-            echo "Attempt $i/10 - Typesense not ready yet..."
             sleep 10
-            if [ $i -eq 10 ]; then
-              echo "Typesense failed to become healthy"
-              exit 1
-            fi
           done
           
-          # Start backend with extended health check
-          echo "Starting Backend..."
-          docker compose -f docker-compose.prod.yml up -d --build backend
-          
-          echo "Waiting for backend to become healthy..."
+          docker compose -f docker-compose.prod.yml up -d backend
           for i in {1..15}; do
             if docker compose -f docker-compose.prod.yml exec backend curl -sf http://localhost:8000/health; then
-              echo "Backend is healthy!"
+              echo "Backend ready"
               break
             fi
-            echo "Attempt $i/15 - Backend not ready yet..."
             sleep 10
-            if [ $i -eq 15 ]; then
-              echo "Backend failed to become healthy"
-              docker compose -f docker-compose.prod.yml logs backend
-              exit 1
-            fi
           done
           
-          # Start remaining services
-          echo "Starting all remaining services..."
-          docker compose -f docker-compose.prod.yml up -d
+          # Start frontend with explicit build
+          docker compose -f docker-compose.prod.yml up -d --build frontend
           
-          echo "=== Deployment Status ==="
-          docker compose -f docker-compose.prod.yml ps
+          # Finally start nginx
+          docker compose -f docker-compose.prod.yml up -d nginx
+          
+          # Verify all services
+          docker compose -f docker-compose.prod.yml ps -a
           EOT
 
-      - name: Set up SSL certificates (from scratch)
+      - name: Set up SSL certificates
         run: |
           ssh -T -o StrictHostKeyChecking=no deploy@${{ secrets.HETZNER_SERVER_IP }} << 'EOT'
           set -ex
           cd /home/deploy/app
-      
-          # Clean up any existing containers
-          docker compose -f docker-compose.prod.yml down || true
-          docker rm -f temp_nginx || true
-      
-          # Start NGINX for ACME challenge
-          echo "Starting temporary NGINX..."
-          docker run -d --name temp_nginx \
-            -p 80:80 \
-            -v /home/deploy/app_data/certbot/www:/usr/share/nginx/html \
-            nginx:alpine
-      
-          # Run Certbot (simplified command)
-          docker run --rm \
+          
+          # Stop any running nginx
+          docker compose -f docker-compose.prod.yml stop nginx || true
+          
+          # Run certbot in standalone mode temporarily
+          docker run --rm -p 80:80 \
             -v /home/deploy/app_data/certbot/conf:/etc/letsencrypt \
             -v /home/deploy/app_data/certbot/www:/var/www/certbot \
-            certbot/certbot \
-            certonly \
-            --webroot \
-            -w /var/www/certbot \
+            certbot/certbot certonly \
+            --standalone \
             --non-interactive \
             --agree-tos \
             --email ${{ secrets.PROD_EMAIL }} \
             -d ${{ secrets.PROD_DOMAIN }} \
-            -d www.${{ secrets.PROD_DOMAIN }}
-      
-          # Clean up
-          docker stop temp_nginx
-          docker rm temp_nginx
-      
-          # Start full stack
+            -d www.${{ secrets.PROD_DOMAIN }} \
+            --preferred-challenges http
+          
+          # Restart everything
           docker compose -f docker-compose.prod.yml up -d
           EOT
 
