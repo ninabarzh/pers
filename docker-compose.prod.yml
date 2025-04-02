@@ -130,16 +130,22 @@ services:
   certbot:
     image: certbot/certbot:latest
     volumes:
-      - certbot_www:/var/www/certbot:ro  # For ACME challenges (read-only)
-      - certbot_conf:/etc/letsencrypt:ro # For certificates (read-only)
+      - certbot_www:/var/www/certbot  # For ACME challenges
+      - certbot_conf:/etc/letsencrypt # For certificates
     entrypoint: "/bin/sh -c"
     command: |
-      "trap exit TERM; while :; do 
-        certbot renew --webroot -w /var/www/certbot; 
-        sleep 12h & wait $$!; 
+      "trap exit TERM; while :; do
+        certbot renew \
+          --webroot -w /var/www/certbot \
+          --post-hook 'nginx -s reload' &&
+        sleep 12h &
+        wait $$!
       done"
+    environment:
+      - EMAIL=${EMAIL}
+      - DOMAIN=${DOMAIN}
     healthcheck:
-      test: ["CMD-SHELL", "certbot certificates --noninteractive || exit 1"]
+      test: ["CMD-SHELL", "certbot certificates --noninteractive | grep -q 'VALID' || exit 1"]
       interval: 1h
       timeout: 10s
       retries: 3

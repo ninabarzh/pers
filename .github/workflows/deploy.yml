@@ -187,27 +187,30 @@ jobs:
           docker compose -f docker-compose.prod.yml down || true
           docker rm -f temp_nginx || true
       
-          # Start NGINX with unique name
-          echo "Starting NGINX for certificate issuance..."
-          docker compose -f docker-compose.prod.yml run -d --service-ports --name certbot_nginx nginx
+          # Start NGINX for ACME challenge
+          echo "Starting temporary NGINX..."
+          docker run -d --name temp_nginx \
+            -p 80:80 \
+            -v /home/deploy/app_data/certbot/www:/usr/share/nginx/html \
+            nginx:alpine
       
-          # Verify NGINX is running
-          if ! docker ps | grep certbot_nginx; then
-            echo "❌ NGINX failed to start"
-            docker logs certbot_nginx
-            exit 1
-          fi
-      
-          # Run Certbot
-          docker compose -f docker-compose.prod.yml run --rm certbot \
-            certonly --webroot -w /var/www/certbot \
-            --non-interactive --agree-tos \
+          # Run Certbot (simplified command)
+          docker run --rm \
+            -v /home/deploy/app_data/certbot/conf:/etc/letsencrypt \
+            -v /home/deploy/app_data/certbot/www:/var/www/certbot \
+            certbot/certbot \
+            certonly \
+            --webroot \
+            -w /var/www/certbot \
+            --non-interactive \
+            --agree-tos \
             --email ${{ secrets.PROD_EMAIL }} \
-            -d ${{ secrets.PROD_DOMAIN }} -d www.${{ secrets.PROD_DOMAIN }}
+            -d ${{ secrets.PROD_DOMAIN }} \
+            -d www.${{ secrets.PROD_DOMAIN }}
       
           # Clean up
-          docker stop certbot_nginx
-          docker rm certbot_nginx
+          docker stop temp_nginx
+          docker rm temp_nginx
       
           # Start full stack
           docker compose -f docker-compose.prod.yml up -d
