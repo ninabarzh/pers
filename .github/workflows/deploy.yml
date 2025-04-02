@@ -183,36 +183,42 @@ jobs:
           set -ex
           cd /home/deploy/app
 
-          # 1. Stop nginx if running
-          sudo docker compose -f docker-compose.prod.yml stop nginx || true
-          sudo pkill -f 'nginx|apache|httpd' || true
-          sleep 3
+          # 1. Check if certificates already exist
+          if [ -d "/home/deploy/app_data/certbot/conf/live/${{ secrets.PROD_DOMAIN }}" ]; then
+            echo "Certificates already exist, skipping creation"
+            exit 0
+          fi
 
-          # 2. Verify port 80 is accessible
-          PUBLIC_IP=$(curl -4 -s ifconfig.me)
-          if ! timeout 3 bash -c "</dev/tcp/$PUBLIC_IP/80"; then
-            echo "❌ Port 80 not accessible!"
-            echo "Please check Hetzner Cloud Firewall rules"
+          # 2. Stop any running containers
+          docker compose -f docker-compose.prod.yml down || true
+
+          # 3. Start NGINX with HTTP only
+          echo "Starting temporary NGINX for certificate issuance..."
+          docker compose -f docker-compose.prod.yml run -d --service-ports --name temp_nginx nginx
+
+          # 4. Verify NGINX is serving on port 80
+          echo "Waiting for NGINX to start..."
+          sleep 5
+          if ! docker exec temp_nginx curl -sf http://localhost; then
+            echo "❌ NGINX not responding internally"
+            docker logs temp_nginx
             exit 1
           fi
 
-          # 3. Run Certbot with host networking
+          # 5. Run Certbot
           MAX_RETRIES=3
           for i in $(seq 1 $MAX_RETRIES); do
-            sudo docker compose -f docker-compose.prod.yml run --rm \
-              --service-ports \
-              --network host \
+            if docker compose -f docker-compose.prod.yml run --rm \
               certbot \
               certonly \
-              --standalone \
+              --webroot -w /var/www/certbot \
               --non-interactive \
               --agree-tos \
               --email ${{ secrets.PROD_EMAIL }} \
               -d ${{ secrets.PROD_DOMAIN }} \
-              -d www.${{ secrets.PROD_DOMAIN }} \
-              --preferred-challenges http \
-              --http-01-port 80 \
-              --debug-challenges && break
+              -d www.${{ secrets.PROD_DOMAIN }}; then
+              break
+            fi
               
             if [ $i -lt $MAX_RETRIES ]; then
               echo "⚠️ Attempt $i failed, retrying in 10 seconds..."
@@ -223,9 +229,14 @@ jobs:
             fi
           done
 
-          # 4. Restart services
-          sudo docker compose -f docker-compose.prod.yml up -d
-          
+          # 6. Clean up temporary container
+          docker stop temp_nginx
+          docker rm temp_nginx
+
+          # 7. Start full stack with SSL
+          echo "Starting production stack with SSL..."
+          docker compose -f docker-compose.prod.yml up -d
+
           echo "✅ SSL setup completed successfully!"
           EOT
 
