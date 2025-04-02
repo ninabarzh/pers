@@ -201,12 +201,6 @@ jobs:
           docker compose -f docker-compose.prod.yml ps
           EOT
 
-      - name: Verify Brotli
-        run: |
-          ssh -T deploy@${{ secrets.HETZNER_SERVER_IP }} << 'EOT'
-          docker compose -f docker-compose.prod.yml exec nginx nginx -T 2>&1 | grep brotli
-          EOT
-
       - name: Set up SSL certificates
         run: |
           ssh -T -o StrictHostKeyChecking=no deploy@${{ secrets.HETZNER_SERVER_IP }} << 'EOT'

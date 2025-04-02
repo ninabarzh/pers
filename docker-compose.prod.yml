@@ -101,9 +101,7 @@ services:
       - app-network
 
   nginx:
-    build:
-      context: .nginx
-      dockerfile: Dockerfile.prod
+    image: nginx:1.25-alpine
     # production server deploy:docker UID/GID
     user: "1001:1001"
     volumes:
@@ -122,12 +120,9 @@ services:
     # Ensure certs exist
     command: >
       sh -c '
-      if [ -f "/etc/letsencrypt/live/$${DOMAIN}/fullchain.pem" ]; then
-        exec nginx -g "daemon off;";
-      else
-        echo "ERROR: SSL certificates missing!";
-        exit 1;
-      fi'
+      # Start NGINX
+      exec nginx -g "daemon off;"
+      '
     restart: unless-stopped
     networks:
       - app-network

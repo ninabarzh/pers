@@ -7,7 +7,7 @@ WORKDIR /app
 # Install build dependencies
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-    gcc python3-dev brotli gzip && \
+    gcc python3-dev gzip && \
     rm -rf /var/lib/apt/lists/*
 
 # Create virtual environment
@@ -21,19 +21,12 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy and process static files
 COPY . .
 RUN find src/app/static/ -type f \( -name "*.css" -o -name "*.js" \) \
-    -exec gzip -9 -k {} \; \
-    -exec brotli -9 -k {} \;
+    -exec gzip -9 -k {} \;
 
 # Stage 2: Runtime
 FROM python:3.12-slim
 
 WORKDIR /app
-
-# Install runtime dependencies
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-    brotli && \
-    rm -rf /var/lib/apt/lists/*
 
 # Create docker group and deploy user (matches host)
 RUN groupadd -g 1001 docker && \
