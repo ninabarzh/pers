@@ -37,18 +37,23 @@ COPY --from=builder /opt/venv /opt/venv
 
 # Copy application code with correct ownership
 COPY --from=builder --chown=deploy:docker /app/src/ ./src/
-RUN chmod -R 550 ./src  # Read+execute for owner/group
 
-# Static files setup
+# Static files setup - improved
 RUN mkdir -p /var/www/static && \
     cp -r src/app/static/* /var/www/static/ && \
-    chown -R deploy:docker /var/www/static && \
-    chmod -R 750 /var/www/static  # Owner/group can write
+    find /var/www/static -type d -exec chmod 755 {} \; && \
+    find /var/www/static -type f -exec chmod 644 {} \; && \
+    chown -R deploy:docker /var/www/static
+
+# Set permissions for application code
+RUN find ./src -type d -exec chmod 550 {} \; && \
+    find ./src -type f -exec chmod 440 {} \;
 
 # Environment configuration
 ENV PATH="/opt/venv/bin:$PATH" \
     PYTHONPATH="/app/src" \
-    PYTHONUNBUFFERED="1"
+    PYTHONUNBUFFERED="1" \
+    STATIC_URL="/static/"
 
 USER deploy:docker
 
