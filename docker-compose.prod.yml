@@ -113,6 +113,11 @@ services:
     # production server deploy:docker UID/GID
     user: "1001:1001"
     volumes:
+      - ./nginx/cache/client_temp:/var/cache/nginx/client_temp
+      - ./nginx/cache/proxy_temp:/var/cache/nginx/proxy_temp
+      - ./nginx/cache/fastcgi_temp:/var/cache/nginx/fastcgi_temp
+      - ./nginx/cache/uwsgi_temp:/var/cache/nginx/uwsgi_temp
+      - ./nginx/cache/scgi_temp:/var/cache/nginx/scgi_temp
       - /home/deploy/app_data/certbot/conf:/etc/letsencrypt:ro
       - /home/deploy/app_data/certbot/www:/var/www/certbot:ro
       - ./nginx/nginx.prod.conf:/etc/nginx/nginx.conf:ro
