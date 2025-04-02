@@ -122,6 +122,7 @@ services:
     ports:
       - "80:80"
       - "443:443"
+    network_mode: "host"
     depends_on:
       - backend
       - frontend
