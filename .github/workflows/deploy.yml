@@ -182,62 +182,31 @@ jobs:
           ssh -T -o StrictHostKeyChecking=no deploy@${{ secrets.HETZNER_SERVER_IP }} << 'EOT'
           set -ex
           cd /home/deploy/app
-
+      
           # 1. Check if certificates already exist
           if [ -d "/home/deploy/app_data/certbot/conf/live/${{ secrets.PROD_DOMAIN }}" ]; then
             echo "Certificates already exist, skipping creation"
             exit 0
           fi
-
+      
           # 2. Stop any running containers
           docker compose -f docker-compose.prod.yml down || true
-
-          # 3. Start NGINX with HTTP only
-          echo "Starting temporary NGINX for certificate issuance..."
-          docker compose -f docker-compose.prod.yml run -d --service-ports --name temp_nginx nginx
-
-          # 4. Verify NGINX is serving on port 80
-          echo "Waiting for NGINX to start..."
-          sleep 5
-          if ! docker exec temp_nginx curl -sf http://localhost; then
-            echo "❌ NGINX not responding internally"
-            docker logs temp_nginx
-            exit 1
-          fi
-
-          # 5. Run Certbot
-          MAX_RETRIES=3
-          for i in $(seq 1 $MAX_RETRIES); do
-            if docker compose -f docker-compose.prod.yml run --rm \
-              certbot \
-              certonly \
-              --webroot -w /var/www/certbot \
-              --non-interactive \
-              --agree-tos \
-              --email ${{ secrets.PROD_EMAIL }} \
-              -d ${{ secrets.PROD_DOMAIN }} \
-              -d www.${{ secrets.PROD_DOMAIN }}; then
-              break
-            fi
-              
-            if [ $i -lt $MAX_RETRIES ]; then
-              echo "⚠️ Attempt $i failed, retrying in 10 seconds..."
-              sleep 10
-            else
-              echo "❌ Certbot failed after $MAX_RETRIES attempts"
-              exit 1
-            fi
-          done
-
-          # 6. Clean up temporary container
-          docker stop temp_nginx
-          docker rm temp_nginx
-
-          # 7. Start full stack with SSL
-          echo "Starting production stack with SSL..."
-          docker compose -f docker-compose.prod.yml up -d
-
-          echo "✅ SSL setup completed successfully!"
+      
+          # 3. Start NGINX in foreground for debugging
+          echo "Starting NGINX in foreground for debugging..."
+          docker compose -f docker-compose.prod.yml run --rm --service-ports --name temp_nginx nginx \
+            nginx -g 'daemon off;' || true
+      
+          # 4. If we get here, NGINX failed - show full debug info
+          echo "❌ NGINX failed to start. Debug information:"
+          echo "=== NGINX Config ==="
+          docker compose -f docker-compose.prod.yml run --rm --entrypoint="" nginx cat /etc/nginx/nginx.conf
+          echo "=== Directory Structure ==="
+          docker compose -f docker-compose.prod.yml run --rm --entrypoint="" nginx ls -la /etc/nginx/
+          echo "=== Error Log ==="
+          docker compose -f docker-compose.prod.yml run --rm --entrypoint="" nginx cat /var/log/nginx/error.log || echo "No error log found"
+          
+          exit 1
           EOT
 
       - name: Verify deployment
