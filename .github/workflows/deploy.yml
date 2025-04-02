@@ -183,30 +183,34 @@ jobs:
           set -ex
           cd /home/deploy/app
       
-          # 1. Check if certificates already exist
-          if [ -d "/home/deploy/app_data/certbot/conf/live/${{ secrets.PROD_DOMAIN }}" ]; then
-            echo "Certificates already exist, skipping creation"
-            exit 0
+          # Clean up any existing containers
+          docker compose -f docker-compose.prod.yml down || true
+          docker rm -f temp_nginx || true
+      
+          # Start NGINX with unique name
+          echo "Starting NGINX for certificate issuance..."
+          docker compose -f docker-compose.prod.yml run -d --service-ports --name certbot_nginx nginx
+      
+          # Verify NGINX is running
+          if ! docker ps | grep certbot_nginx; then
+            echo "❌ NGINX failed to start"
+            docker logs certbot_nginx
+            exit 1
           fi
       
-          # 2. Stop any running containers
-          docker compose -f docker-compose.prod.yml down || true
+          # Run Certbot
+          docker compose -f docker-compose.prod.yml run --rm certbot \
+            certonly --webroot -w /var/www/certbot \
+            --non-interactive --agree-tos \
+            --email ${{ secrets.PROD_EMAIL }} \
+            -d ${{ secrets.PROD_DOMAIN }} -d www.${{ secrets.PROD_DOMAIN }}
       
-          # 3. Start NGINX in foreground for debugging
-          echo "Starting NGINX in foreground for debugging..."
-          docker compose -f docker-compose.prod.yml run --rm --service-ports --name temp_nginx nginx \
-            nginx -g 'daemon off;' || true
+          # Clean up
+          docker stop certbot_nginx
+          docker rm certbot_nginx
       
-          # 4. If we get here, NGINX failed - show full debug info
-          echo "❌ NGINX failed to start. Debug information:"
-          echo "=== NGINX Config ==="
-          docker compose -f docker-compose.prod.yml run --rm --entrypoint="" nginx cat /etc/nginx/nginx.conf
-          echo "=== Directory Structure ==="
-          docker compose -f docker-compose.prod.yml run --rm --entrypoint="" nginx ls -la /etc/nginx/
-          echo "=== Error Log ==="
-          docker compose -f docker-compose.prod.yml run --rm --entrypoint="" nginx cat /var/log/nginx/error.log || echo "No error log found"
-          
-          exit 1
+          # Start full stack
+          docker compose -f docker-compose.prod.yml up -d
           EOT
 
       - name: Verify deployment
