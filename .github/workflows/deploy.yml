@@ -21,6 +21,13 @@ jobs:
 
       - name: Transfer files to server
         run: |
+          # Add cleanup command first
+          ssh -T -o StrictHostKeyChecking=no deploy@${{ secrets.HETZNER_SERVER_IP }} << 'EOT'
+          set -e
+          cd /home/deploy/app
+          sudo rm -rf nginx/cache/* || true
+          EOT
+          
           rsync -rlptDzv \
             --delete \
             --exclude='.git' \
