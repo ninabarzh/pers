@@ -7,6 +7,8 @@ from starlette.applications import Starlette
 from starlette.routing import Route, Mount
 from starlette.responses import JSONResponse
 from starlette.staticfiles import StaticFiles
+from starlette.middleware import Middleware
+from starlette.middleware.cors import CORSMiddleware
 from .typesense_client import get_typesense_client
 
 # Initialize logging
@@ -17,12 +19,36 @@ logger = logging.getLogger(__name__)
 from .routes.search import search
 from .routes.upload import upload
 
+
 # Environment setup
-env_path = Path(__file__).parent.parent.parent / '.env'
-if env_path.exists():
-    load_dotenv(env_path)
-else:
-    logger.warning(f"No .env file found at {env_path}")
+def load_environment():
+    """Conditionally loads .env file from either container path or project root"""
+    # Try container path first (Docker production)
+    container_env = Path("/app/.env")
+    if container_env.exists():
+        load_dotenv(container_env)
+        logger.info(f"Loaded .env from container path: {container_env}")
+        return
+
+    # Try development path (4 levels up from src/app/)
+    dev_env = Path(__file__).parent.parent.parent.parent / '.env'
+    if dev_env.exists():
+        load_dotenv(dev_env)
+        logger.info(f"Loaded .env from development path: {dev_env}")
+        return
+
+    # Try adjacent .env (for alternative project structures)
+    adjacent_env = Path(__file__).parent / '.env'
+    if adjacent_env.exists():
+        load_dotenv(adjacent_env)
+        logger.info(f"Loaded .env from adjacent path: {adjacent_env}")
+        return
+
+    logger.warning("No .env file found in any standard location")
+
+
+# Initialize environment
+load_environment()
 
 config = {
     "PORT": int(os.getenv('BACKEND_PORT', 8000)),
@@ -101,10 +127,29 @@ if static_dir.exists():
 else:
     logger.warning(f"Static directory not found at {static_dir}")
 
+
 app = Starlette(
     debug=config["DEBUG"],
     routes=routes
 )
+
+
+if config["DEBUG"]:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_methods=["*"],
+        allow_headers=["*"]
+    )
+else:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["https://finder.green"],
+        allow_methods=["GET", "POST", "OPTIONS"],
+        allow_headers=["Content-Type"],
+        max_age=600
+    )
+
 
 if __name__ == "__main__":
     import uvicorn

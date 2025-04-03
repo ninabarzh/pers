@@ -16,12 +16,36 @@ from .routes.admin import admin_dashboard, handle_admin_actions
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
+
 # Environment setup
-env_path = Path(__file__).parent.parent.parent / '.env'
-if env_path.exists():
-    load_dotenv(env_path)
-else:
-    logger.warning(f"No .env file found at {env_path}")
+def load_environment():
+    """Conditionally loads .env file from either container path or project root"""
+    # Try container path first (Docker production)
+    container_env = Path("/app/.env")
+    if container_env.exists():
+        load_dotenv(container_env)
+        logger.info(f"Loaded .env from container path: {container_env}")
+        return
+
+    # Try development path (4 levels up from src/app/)
+    dev_env = Path(__file__).parent.parent.parent.parent / '.env'
+    if dev_env.exists():
+        load_dotenv(dev_env)
+        logger.info(f"Loaded .env from development path: {dev_env}")
+        return
+
+    # Try adjacent .env (for alternative project structures)
+    adjacent_env = Path(__file__).parent / '.env'
+    if adjacent_env.exists():
+        load_dotenv(adjacent_env)
+        logger.info(f"Loaded .env from adjacent path: {adjacent_env}")
+        return
+
+    logger.warning("No .env file found in any standard location")
+
+
+# Initialize environment
+load_environment()
 
 config = {
     "PORT": int(os.getenv('FRONTEND_PORT', 8001)),
@@ -58,6 +82,9 @@ app = Starlette(
     debug=config["DEBUG"],
     routes=routes
 )
+
+# Add the config to app state
+app.state.config = config
 
 if __name__ == "__main__":
     import uvicorn

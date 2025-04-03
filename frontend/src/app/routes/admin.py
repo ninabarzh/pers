@@ -50,12 +50,16 @@ async def handle_admin_actions(request: Request):
                     {"request": request, "error": "JSON must be an array"},
                 )
 
+            # Get backend URL from app state
+            backend_url = request.app.state.config['BACKEND_URL']
+
             # Send to backend
             async with httpx.AsyncClient() as client:
                 response = await client.post(
-                    "http://backend:8000/upload",
+                    f"{backend_url}/upload",
                     json=data,
-                    timeout=30.0
+                    timeout=30.0,
+                    headers={"Content-Type": "application/json"}  # Explicit content-type
                 )
                 response.raise_for_status()
 
