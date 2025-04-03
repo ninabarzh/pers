@@ -5,13 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
     <title>{% block title %}Green Finder{% endblock %}</title>
-    <!-- Bootstrap CSS FIRST -->
     <link rel="stylesheet" href="/static/css/bootstrap.min.css">
-
-    <!-- THEN your custom CSS -->
     <link rel="stylesheet" href="/static/css/styles.css">
-
-    <!-- Bootstrap Icons LAST -->
     <link rel="stylesheet" href="/static/fonts/bootstrap-icons.css">
     {% block extra_css %}{% endblock %}
 </head>
@@ -66,7 +61,7 @@
     </footer>
 
 
-    <script src="{{ url_for('static', path='js/bootstrap.bundle.min.js') }}"></script>
+    <script src="/static/js/bootstrap.bundle.min.js"></script>
     {% block extra_js %}{% endblock %}
 </body>
 </html>

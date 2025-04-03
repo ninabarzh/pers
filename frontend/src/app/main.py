@@ -10,7 +10,7 @@ from starlette.staticfiles import StaticFiles
 
 # Relative imports
 from .routes.home import home
-from .routes.upload import upload_page, handle_upload
+from .routes.admin import admin_dashboard, handle_admin_actions
 
 # Initialize logging
 logging.basicConfig(level=logging.DEBUG)
@@ -49,8 +49,8 @@ except Exception as e:
 routes = [
     Route("/", home, methods=["GET"]),
     Route("/health", lambda r: JSONResponse({"status": "healthy"})),
-    Route("/upload", upload_page, methods=["GET"]),
-    Route("/upload", handle_upload, methods=["POST"]),
+    Route("/admin", admin_dashboard, methods=["GET"]),
+    Route("/admin", handle_admin_actions, methods=["POST"]),
     Mount("/static", StaticFiles(directory=str(config["STATIC_DIR"])), name="static"),
 ]
 
