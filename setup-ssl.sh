@@ -3,6 +3,7 @@ set -euo pipefail
 
 DOMAIN="finder.green"
 EMAIL="nina@tymyrddin.dev"
+# Also, do create the necessary directories on the server
 
 echo "=== Setting up SSL certificates ==="
 

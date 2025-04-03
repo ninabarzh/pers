@@ -25,7 +25,9 @@ jobs:
           ssh -T -o StrictHostKeyChecking=no deploy@${{ secrets.HETZNER_SERVER_IP }} << 'EOT'
           set -e
           cd /home/deploy/app
-          sudo rm -rf nginx/cache/* || true
+          # Add sudo for nginx directory cleanup
+          sudo rm -rf nginx/cache/* 2>/dev/null || true
+          sudo chown -R deploy:docker nginx  # Ensure ownership
           EOT
           
           rsync -rlptDzv \
@@ -39,6 +41,19 @@ jobs:
             -e "ssh -o StrictHostKeyChecking=no" \
             "$GITHUB_WORKSPACE/" \
             "deploy@${{ secrets.HETZNER_SERVER_IP }}:/home/deploy/app/"
+
+      - name: Set up directories and permissions
+        run: |
+          ssh -T deploy@${{ secrets.HETZNER_SERVER_IP }} << 'EOT'
+          set -ex
+          # Ensure cache directories exist with correct permissions
+          sudo mkdir -p /home/deploy/app/nginx/cache/{client_temp,proxy_temp,fastcgi_temp,uwsgi_temp,scgi_temp}
+          sudo chown -R 1001:1001 /home/deploy/app/nginx/cache
+          sudo chmod -R 750 /home/deploy/app/nginx/cache
+          
+          # Verify permissions
+          ls -ld /home/deploy/app/nginx/cache/*
+          EOT
 
       - name: Verify NGINX build files
         run: |
