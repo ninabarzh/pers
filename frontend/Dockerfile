@@ -3,44 +3,46 @@
 FROM python:3.12-slim
 
 # Set environment variables
-ENV PYTHONPATH=/app/src \
-    PYTHONUNBUFFERED=1 \
+ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1
 
 # Set the working directory
 WORKDIR /app
 
-# Install system dependencies (if needed)
+# Install system dependencies
 RUN apt-get update && \
     apt-get install -y --no-install-recommends curl && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
 # Copy and install Python dependencies
-COPY frontend/requirements.txt .
+COPY frontend/requirements-dev.txt .
 RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
+    pip install --no-cache-dir -r requirements-dev.txt
 
-# Copy the application code
-COPY frontend/src/ /app/src/
+# Copy application files
 COPY frontend/pyproject.toml /app/
+COPY frontend/src/ /app/src/
+
+# Install the package in production mode
+RUN pip install .
 
 # Copy test files
 COPY frontend/tests/ /app/tests/
 COPY frontend/run_tests.sh /app/
 
-# Copy the .env file from the root directory
-COPY .env .env
+# Copy the .env file
+COPY .env /app/.env
 
-# Create a non-root user and switch to it
+# Create and switch to non-root user
 RUN useradd -m myuser && \
-    chown -R myuser:myuser /app  # Change ownership of /app \
-RUN mkdir -p /app/src/app/static && \
+    chown -R myuser:myuser /app && \
+    mkdir -p /app/src/app/static && \
     chown -R myuser:myuser /app/src/app/static
 USER myuser
 
-# Expose the port the app runs on
+# Expose the port
 EXPOSE 8001
 
-# Command to run the application (default)
-CMD ["uvicorn", "src.app.main:app", "--host", "0.0.0.0", "--port", "8001"]
+# Start the application
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8001"]

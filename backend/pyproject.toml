@@ -20,10 +20,12 @@ dependencies = [
     "pytest-mock~=3.14.0",
     "pytest-cov~=6.0.0",
     "httpx~=0.28.1",
+    "python_dotenv~=1.0.1",
 ]
 
-[tool.setuptools.packages.find]
-where = ["src"]  # Look for packages in the `src` directory
+[tool.setuptools]
+packages = ["app"]
+package-dir = {"app" = "src/app"}  # Explicit package directory mapping
 
 [tool.pytest.ini_options]
 addopts = "-v"
