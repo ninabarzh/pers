@@ -1,3 +1,4 @@
+# frontend/src/app/routes/static_pages.py
 from starlette.templating import Jinja2Templates
 from starlette.requests import Request
 from datetime import datetime
@@ -13,8 +14,10 @@ def get_base_context(request: Request, active_page: str = ""):
     return {
         "request": request,
         "active_page": active_page,
-        "now": datetime.now()  # For last updated dates
+        "now": datetime.now(),  # For last updated dates
+        "HCAPTCHA_SITE_KEY": os.getenv("HCAPTCHA_SITE_KEY")  # Add hCaptcha key to base
     }
+
 
 async def about(request: Request):
     context = get_base_context(request, "about")
@@ -23,12 +26,19 @@ async def about(request: Request):
         {**context, "meta_title": "About Us - Pers"}
     )
 
+
 async def contact(request: Request):
-    context = get_base_context(request, "contact")
+    """Contact page with Friendly Captcha integration"""
+    context = get_base_context(request, "contact")  # Preserve your existing context
+    context.update({
+        "meta_title": "Contact Us - Pers",  # Keep your meta title
+        "FRIENDLY_CAPTCHA_SITE_KEY": os.getenv("FRIENDLY_CAPTCHA_SITE_KEY")  # Add captcha key
+    })
     return templates.TemplateResponse(
         "contact.html",
-        {**context, "meta_title": "Contact Us - Pers"}
+        context
     )
+
 
 async def privacy(request: Request):
     context = get_base_context(request, "privacy")
@@ -36,6 +46,7 @@ async def privacy(request: Request):
         "privacy.html",
         {**context, "meta_title": "Privacy Policy - Pers"}
     )
+
 
 async def terms(request: Request):
     context = get_base_context(request, "terms")

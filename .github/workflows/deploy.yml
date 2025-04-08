@@ -102,6 +102,11 @@ jobs:
           DEBUG=false
           ENV=production
           EMAIL=${{ secrets.PROD_EMAIL }}
+          
+          PROTON_SMTP_CREDENTIALS=${{ secrets.PROTON_SMTP_CREDENTIALS }}
+          FRIENDLY_CAPTCHA_SITE_KEY=${{ secrets.FRIENDLY_CAPTCHA_SITE_KEY }}
+          FRIENDLY_CAPTCHA_SECRET=${{ secrets.FRIENDLY_CAPTCHA_SECRET }}
+          CSRF_SECRET_KEY=${{ secrets.CSRF_SECRET_KEY }}
 
           TYPESENSE_API_KEY=${{ secrets.PROD_TYPESENSE_API_KEY }}
           TYPESENSE_HOST=typesense

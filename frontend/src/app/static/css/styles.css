@@ -431,3 +431,9 @@ body {
     vertical-align: top;
     padding-top: 0.5em; /* Adjust to vertically center with logo */
 }
+
+/* Friendly captcha */
+.frc-captcha {
+    margin: 1rem 0;
+    min-height: 50px; /* Prevent layout shift */
+}

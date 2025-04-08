@@ -9,6 +9,7 @@ from starlette.responses import JSONResponse
 from starlette.staticfiles import StaticFiles
 from starlette.middleware import Middleware
 from starlette.middleware.cors import CORSMiddleware
+from starlette_csrf import CSRFMiddleware
 from .typesense_client import get_typesense_client
 
 # Initialize logging
@@ -18,6 +19,7 @@ logger = logging.getLogger(__name__)
 # Relative imports
 from .routes.search import search
 from .routes.upload import upload
+from .routes.contact import contact_post
 
 
 # Environment setup
@@ -46,7 +48,6 @@ def load_environment():
 
     logger.warning("No .env file found in any standard location")
 
-
 # Initialize environment
 load_environment()
 
@@ -59,7 +60,8 @@ config = {
         "PORT": os.getenv('TYPESENSE_PORT', '8108'),
         "PROTOCOL": os.getenv('TYPESENSE_PROTOCOL', 'http')
     },
-    "STATIC_DIR": str(Path(__file__).parent.parent / "static")
+    "STATIC_DIR": str(Path(__file__).parent.parent / "static"),
+    "CSRF_SECRET": os.getenv("CSRF_SECRET_KEY", "default-secret-change-me")  # Add this line
 }
 
 # Check production variables are set
@@ -119,6 +121,7 @@ routes = [
     Route("/health", health_check, methods=["GET"]),
     Route("/search", search, methods=["GET"]),
     Route("/upload", upload, methods=["POST"]),
+    Route("/contact", contact_post, methods=["POST"]),
 ]
 
 # Only mount static files if directory exists
@@ -128,9 +131,26 @@ else:
     logger.warning(f"Static directory not found at {static_dir}")
 
 
+middleware = [
+    Middleware(
+        CORSMiddleware,
+        allow_origins=["*"] if config["DEBUG"] else ["https://finder.green"],
+        allow_methods=["*"] if config["DEBUG"] else ["GET", "POST", "OPTIONS"],
+        allow_headers=["*"] if config["DEBUG"] else ["Content-Type"],
+        max_age=600 if not config["DEBUG"] else None
+    ),
+    Middleware(
+        CSRFMiddleware,
+        secret=os.getenv("CSRF_SECRET_KEY"),  # Add to your .env
+        sensitive_cookies=["session"],
+        safe_methods={"GET", "HEAD", "OPTIONS"}
+    )
+]
+
 app = Starlette(
     debug=config["DEBUG"],
-    routes=routes
+    routes=routes,
+    middleware=middleware  # This replaces the separate add_middleware calls
 )
 
 
