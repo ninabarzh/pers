@@ -14,13 +14,15 @@ RUN apt-get update && \
 RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
-# Install Python dependencies
-COPY pyproject.toml /app/
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir .
+# Copy Python dependencies
+COPY pyproject.toml ./
 
 # Copy application code
-COPY src/app/ /app/src/app/
+COPY src/ ./src/
+
+# Install dependencies
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir .
 
 # Process static files
 RUN mkdir -p /var/www/static && \

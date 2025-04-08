@@ -14,13 +14,18 @@ RUN apt-get update && \
 RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
-# Copy and install Python dependencies
-COPY pyproject.toml /app/
+# Copy Python dependencies
+COPY pyproject.toml ./
+
+# Copy application code
+COPY src/ ./src/
+
+# Install dependencies
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir .
 
 # Copy application code
-COPY src/app/ /app/src/app/
+COPY src/ ./src/
 
 # Security checks
 RUN find . -name '*.py' -exec chmod 644 {} \; && \
