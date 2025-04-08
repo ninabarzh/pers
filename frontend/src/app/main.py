@@ -48,6 +48,9 @@ def load_environment():
 # Initialize environment
 load_environment()
 
+logger.info(f"Friendly Captcha Site Key: {os.getenv('FRIENDLY_CAPTCHA_SITE_KEY')}")
+logger.info(f"CSRF Secret Key: {bool(os.getenv('CSRF_SECRET_KEY'))}")
+
 config = {
     "PORT": int(os.getenv('FRONTEND_PORT', 8001)),
     "DEBUG": os.getenv('DEBUG', 'false').lower() in ('true', '1', 't'),

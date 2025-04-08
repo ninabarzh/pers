@@ -16,7 +16,7 @@ async def validate_form_data(form_data: Union[Dict[str, Any], FormData]) -> Dict
         'name': {'min': 2, 'max': 100},
         'email': {'pattern': re.compile(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$')},
         'message': {'min': 10, 'max': 2000},
-        'h-captcha-response': {},
+        'frc-captcha-solution': {},
         'consent': {}
     }
 
