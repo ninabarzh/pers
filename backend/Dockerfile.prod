@@ -15,7 +15,7 @@ RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
 # Copy and install Python dependencies
-COPY backend/pyproject.toml backend/README.md /app/
+COPY backend/pyproject.toml /app/
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir .
 
