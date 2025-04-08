@@ -102,20 +102,21 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
 
-        // ===== NEW FRIENDLY CAPTCHA VALIDATION =====
-        const solution = document.querySelector('.frc-captcha')?.dataset?.solution;
+        // Get the captcha solution
+        const frcCaptcha = document.querySelector('.frc-captcha');
+        const solution = frcCaptcha?.dataset?.solution;
+
         if (!solution) {
             captchaError.classList.remove('d-none');
             window.scrollTo({
-                top: document.querySelector('.frc-captcha').offsetTop - 100,
+                top: frcCaptcha.offsetTop - 100,
                 behavior: 'smooth'
             });
             return;
         }
-        // ===========================================
 
         const formData = new FormData(form);
-        formData.append('frc-captcha-solution', solution);  // Changed from h-captcha-response
+        formData.append('frc-captcha-solution', solution);
 
         submitBtn.disabled = true;
         const originalBtnText = submitBtn.innerHTML;
@@ -133,7 +134,37 @@ document.addEventListener('DOMContentLoaded', function() {
                     'X-CSRF-Token': '{{ csrf_token }}'
                 }
             });
-            // ... (rest of your existing JS code) ...
+
+            const result = await response.json();
+
+            if (response.ok) {
+                feedbackDiv.innerHTML = `
+                    <div class="alert alert-success">
+                        Message sent successfully!
+                    </div>
+                `;
+                form.reset();
+                form.classList.remove('was-validated');
+                // Reset the captcha if needed
+                if (window.friendlyChallenge) {
+                    window.friendlyChallenge.reset();
+                }
+            } else {
+                feedbackDiv.innerHTML = `
+                    <div class="alert alert-danger">
+                        ${result.detail || 'Error sending message'}
+                    </div>
+                `;
+                if (result.errors?.captcha) {
+                    captchaError.classList.remove('d-none');
+                }
+            }
+        } catch (error) {
+            feedbackDiv.innerHTML = `
+                <div class="alert alert-danger">
+                    Network error. Please try again.
+                </div>
+            `;
         } finally {
             submitBtn.disabled = false;
             submitBtn.innerHTML = originalBtnText;

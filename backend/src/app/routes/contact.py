@@ -10,40 +10,50 @@ from typing import Dict, Any, Pattern, Union
 
 logger = logging.getLogger(__name__)
 
+
 async def validate_form_data(form_data: Union[Dict[str, Any], FormData]) -> Dict[str, Any]:
-    """Validate and sanitize form inputs"""
     required = {
         'name': {'min': 2, 'max': 100},
         'email': {'pattern': re.compile(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$')},
         'message': {'min': 10, 'max': 2000},
-        'frc-captcha-solution': {},
-        'consent': {}
+        'consent': {},
+        'frc-captcha-solution': {'optional': False}  # Explicitly mark as required
     }
 
-    errors: Dict[str, str] = {}
-    data: Dict[str, str] = {}
+    errors = {}
+    data = {}
 
-    # Convert FormData to dict if needed
-    if isinstance(form_data, FormData):
-        form_data = dict(form_data)
+    form_dict = dict(form_data) if isinstance(form_data, FormData) else form_data
+
+    # Debug: Log all received fields
+    print("Received form fields:", form_dict.keys())
 
     for field, rules in required.items():
-        value = form_data.get(field, '').strip()
+        value = form_dict.get(field, '').strip()
 
+        # Skip validation if field is marked optional and empty
+        if rules.get('optional') and not value:
+            continue
+
+        # Special handling for consent checkbox
+        if field == 'consent':
+            if not value or value.lower() not in ('true', 'on', '1'):
+                errors[field] = "You must agree before submitting"
+            continue
+
+        # Handle empty required fields
         if not value:
             errors[field] = "This field is required"
             continue
 
-        if field == 'email' and not rules['pattern'].match(value):  # type: ignore
-            errors[field] = "Invalid email format"
-        elif 'min' in rules and len(value) < rules['min']:
-            errors[field] = f"Must be at least {rules['min']} characters"
-        elif 'max' in rules and len(value) > rules['max']:
-            errors[field] = f"Must be less than {rules['max']} characters"
-        else:
-            data[field] = value
+        # Store valid values
+        data[field] = value
+
+    # Additional debug
+    print("Captcha solution present:", 'frc-captcha-solution' in form_dict)
 
     return {'data': data, 'errors': errors} if not errors else {'errors': errors}
+
 
 async def contact_post(request: Request):
     """Process contact form submission"""
