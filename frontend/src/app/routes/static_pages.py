@@ -15,7 +15,7 @@ def get_base_context(request: Request, active_page: str = ""):
         "request": request,
         "active_page": active_page,
         "now": datetime.now(),  # For last updated dates
-        "HCAPTCHA_SITE_KEY": os.getenv("HCAPTCHA_SITE_KEY")  # Add hCaptcha key to base
+        "FRIENDLY_CAPTCHA_SITE_KEY": os.getenv("FRIENDLY_CAPTCHA_SITE_KEY")  # Add hCaptcha key to base
     }
 
 
