@@ -4,7 +4,7 @@ FROM python:3.12-slim AS builder
 
 WORKDIR /app
 
-# Install build dependencies (minimal)
+# Install build dependencies
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     gcc python3-dev libpq-dev && \
@@ -14,12 +14,13 @@ RUN apt-get update && \
 RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
-# Install Python dependencies with hash checking
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Copy and install Python dependencies
+COPY backend/pyproject.toml backend/README.md /app/
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir .
 
 # Copy application code
-COPY . .
+COPY backend/src/ /app/src/
 
 # Security checks
 RUN find . -name '*.py' -exec chmod 644 {} \; && \
@@ -60,4 +61,4 @@ USER deploy:docker
 HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
     CMD curl -f http://localhost:8000/health || exit 1
 
-CMD ["uvicorn", "src.app.main:app", "--host", "0.0.0.0", "--port", "8000", "--no-access-log"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--no-access-log"]
