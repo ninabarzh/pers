@@ -42,8 +42,8 @@ services:
 
   backend:
     build:
-      context: .
-      dockerfile: backend/Dockerfile.prod
+      context: ./backend
+      dockerfile: Dockerfile.prod
     environment:
       - ENV=production
       - DEBUG=false
@@ -84,8 +84,8 @@ services:
 
   frontend:
     build:
-      context: .  # Fixed path (was .frontend)
-      dockerfile: frontend/Dockerfile.prod
+      context: ./frontend
+      dockerfile: Dockerfile.prod
     environment:
       - ENV=production
       - DEBUG=false
