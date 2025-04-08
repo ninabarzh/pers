@@ -407,3 +407,27 @@ body {
   border-color: #dee2e6;
   z-index: 2; /* Above other page items */
 }
+
+/* ===== ASCII LOGO ===== */
+
+.green-logo {
+    display: inline-block;
+    white-space: pre;
+    margin: 0;
+    vertical-align: top; /* Align with heading */
+    color: #2e8b57;
+    font-family: monospace;
+}
+
+.logo-heading-container {
+    display: flex;
+    align-items: flex-start;
+    gap: 20px;
+    margin-bottom: 20px;
+}
+
+.logo-text {
+    display: inline-block;
+    vertical-align: top;
+    padding-top: 0.5em; /* Adjust to vertically center with logo */
+}

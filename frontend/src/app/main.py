@@ -8,9 +8,10 @@ from starlette.routing import Route, Mount
 from starlette.responses import JSONResponse
 from starlette.staticfiles import StaticFiles
 
-# Relative imports
+# Relative route imports
 from .routes.home import home
 from .routes.admin import admin_dashboard, handle_admin_actions
+from .routes.static_pages import about, contact, privacy, terms
 
 # Initialize logging
 logging.basicConfig(level=logging.DEBUG)
@@ -75,6 +76,11 @@ routes = [
     Route("/health", lambda r: JSONResponse({"status": "healthy"})),
     Route("/admin", admin_dashboard, methods=["GET"]),
     Route("/admin", handle_admin_actions, methods=["POST"]),
+    # Static page routes
+    Route("/about", about, methods=["GET"]),
+    Route("/contact", contact, methods=["GET"]),
+    Route("/privacy", privacy, methods=["GET"]),
+    Route("/terms", terms, methods=["GET"]),
     Mount("/static", StaticFiles(directory=str(config["STATIC_DIR"])), name="static"),
 ]
 

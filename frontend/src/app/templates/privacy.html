@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+
+{% block title %}Privacy Policy{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <div class="card shadow-sm">
+                <div class="card-header bg-light">
+                    <h2 class="h4 mb-0">Privacy Policy</h2>
+                </div>
+                <div class="card-body">
+                    <h3 class="h5">Information we collect</h3>
+                    <p>We only collect information you provide directly:</p>
+                    <ul>
+                        <li>Communications with us</li>
+                    </ul>
+                    <h3 class="h5">Information we collect if you have an account to add information</h3>
+                    <p>We collect information you provide directly, including:</p>
+                    <ul>
+                        <li>Account registration details</li>
+                        <li>Content you upload</li>
+                    </ul>
+
+                    <h3 class="h5 mt-4">How we use information</h3>
+                    <p>We use the information to:</p>
+                    <ul>
+                        <li>Provide and improve our services</li>
+                        <li>Respond to inquiries</li>
+                    </ul>
+
+                    <h3 class="h5 mt-4">Data Sharing</h3>
+                    <p>We do not sell your any information.</p>
+
+                    <h3 class="h5 mt-4">Your rights</h3>
+                    <p>You may:</p>
+                    <ul>
+                        <li>Access your personal data</li>
+                        <li>Request corrections</li>
+                        <li>Request deletion</li>
+                    </ul>
+
+                    <div class="alert alert-success mt-3 p-2" style="font-size: 0.875rem;">
+                        <p class="mb-0">Last updated: {{ now.strftime('%B %d, %Y') }}</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

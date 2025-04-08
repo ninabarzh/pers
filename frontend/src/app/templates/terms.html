@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+
+{% block title %}Terms of Service{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <div class="card shadow-sm">
+                <div class="card-header bg-light">
+                    <h2 class="h4 mb-0">Terms of Service</h2>
+                </div>
+                <div class="card-body">
+                    <h3 class="h5">Acceptance of terms</h3>
+                    <p>By accessing or using our service, you agree to be bound by these terms.</p>
+
+                    <h3 class="h5 mt-4">User responsibilities if you have an account</h3>
+                    <p>We do our best not to get hacked. You are responsible for maintaining the confidentiality of your account.</p>
+
+                    <h3 class="h5 mt-4">Prohibited activities</h3>
+                    <ul>
+                        <li>Illegal or fraudulent activities.</li>
+                        <li>Spamming or phishing.</li>
+                        <li>Reverse engineering our service. No need. You can just <a href="https://github.com/ninabarzh/pers">clone our repository</a>.</li>
+                    </ul>
+
+                    <h3 class="h5 mt-4">Intellectual property</h3>
+                    <p>All content and trademarks are property of their respective owners.</p>
+
+                    <h3 class="h5 mt-4">Limitation of liability</h3>
+                    <p>We are not liable for any indirect, incidental, or consequential damages.</p>
+
+                    <div class="alert alert-success mt-3 p-2" style="font-size: 0.875rem;">
+                        <p class="mb-0">Last updated: {{ now.strftime('%B %d, %Y') }}</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
