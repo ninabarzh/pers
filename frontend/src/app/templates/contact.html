@@ -134,17 +134,23 @@ document.getElementById('contactForm').addEventListener('submit', function(e) {
         Sending...
     `;
 
-    // Send the request
-    fetch(form.action, {
+    // Send the request - UPDATED TO USE apiUrl
+    fetch(apiUrl, {  // Changed from form.action
         method: 'POST',
         headers: {
             'Content-Type': 'application/x-www-form-urlencoded',
             'X-CSRF-Token': '{{ csrf_token }}'
         },
-        body: new URLSearchParams(new FormData(form))
+        body: new URLSearchParams(new FormData(form)),
+        credentials: 'include'  // Important for CORS
     })
     .then(response => {
-        if (!response.ok) throw new Error(response.statusText);
+        console.log('Raw response:', response);  // Added for debugging
+        if (!response.ok) {
+            return response.text().then(text => {
+                throw new Error(`HTTP ${response.status}: ${text}`);
+            });
+        }
         return response.json();
     })
     .then(data => {
@@ -161,6 +167,7 @@ document.getElementById('contactForm').addEventListener('submit', function(e) {
         }
     })
     .catch(error => {
+        console.error('Full error:', error);  // Added for debugging
         document.getElementById('formFeedback').innerHTML = `
             <div class="alert alert-danger">
                 Error: ${error.message || 'Failed to send message'}

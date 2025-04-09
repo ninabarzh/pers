@@ -11,6 +11,7 @@ from starlette.middleware import Middleware
 from starlette.middleware.cors import CORSMiddleware
 from starlette_csrf import CSRFMiddleware
 from .typesense_client import get_typesense_client
+from starlette.requests import Request
 
 # Initialize logging
 logging.basicConfig(level=logging.DEBUG)
@@ -125,10 +126,14 @@ if static_dir.exists():
 middleware = [
     Middleware(
         CORSMiddleware,
-        allow_origins=["*"] if config["DEBUG"] else ["https://finder.green"],
+        allow_origins=[
+            "http://localhost:8080",  # Development
+            "https://finder.green"    # Production
+        ],
         allow_methods=["GET", "POST", "OPTIONS"],
         allow_headers=["*"],
-        max_age=600
+        allow_credentials=True,
+        expose_headers=["*"]
     ),
     Middleware(
         CSRFMiddleware,
@@ -144,6 +149,14 @@ app = Starlette(
     routes=base_routes,
     middleware=middleware
 )
+
+# Add request logging middleware HERE
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    logger.info(f"Incoming request: {request.method} {request.url}")
+    response = await call_next(request)
+    logger.info(f"Response: {response.status_code}")
+    return response
 
 # Add debug routes after app creation
 app.router.routes.append(
