@@ -21,8 +21,7 @@ from .routes.search import search
 from .routes.upload import upload
 from .routes.contact import contact_post
 
-
-# Environment setup
+# Environment setup (original version)
 def load_environment():
     """Conditionally loads .env file from either container path or project root"""
     # Try container path first (Docker production)
@@ -48,7 +47,6 @@ def load_environment():
 
     logger.warning("No .env file found in any standard location")
 
-# Initialize environment
 load_environment()
 
 config = {
@@ -61,17 +59,10 @@ config = {
         "PROTOCOL": os.getenv('TYPESENSE_PROTOCOL', 'http')
     },
     "STATIC_DIR": str(Path(__file__).parent.parent / "static"),
-    "CSRF_SECRET": os.getenv("CSRF_SECRET_KEY", "default-secret-change-me")  # Add this line
+    "CSRF_SECRET_KEY": os.getenv("CSRF_SECRET_KEY", "default-secret-change-me")
 }
 
-# Check production variables are set
-if os.getenv('ENV') == 'production':
-    required_vars = ['TYPESENSE_API_KEY', 'TYPESENSE_HOST']  # Add others as needed
-    missing = [var for var in required_vars if not os.getenv(var)]
-    if missing:
-        raise ValueError(f"Missing required production environment variables: {missing}")
-
-# Create static directory if it doesn't exist
+# Create static directory
 static_dir = Path(config["STATIC_DIR"])
 try:
     static_dir.mkdir(exist_ok=True)
@@ -79,12 +70,11 @@ try:
 except Exception as e:
     logger.error(f"Failed to create static directory: {e}")
 
-
 async def health_check(request):
     """Enhanced health check endpoint"""
     try:
         client = get_typesense_client()
-        health_data = client.health()  # Using the health() method we added
+        health_data = client.health()
 
         if not health_data.get('ok'):
             logger.warning(f"Typesense health check failed: {health_data.get('error', 'Unknown error')}")
@@ -110,13 +100,16 @@ async def root(request):
         "endpoints": {
             "/": "GET - API documentation",
             "/health": "GET - Service health",
+            "/debug-routes": "GET - List all routes",
             "/search": "GET - Search endpoint",
             "/upload": "POST - Upload endpoint",
+            "/contact": "POST - Contact form",
             "/static": "GET - Static files"
         }
     })
 
-routes = [
+# Base routes
+base_routes = [
     Route("/", root),
     Route("/health", health_check, methods=["GET"]),
     Route("/search", search, methods=["GET"]),
@@ -124,52 +117,48 @@ routes = [
     Route("/contact", contact_post, methods=["POST"]),
 ]
 
-# Only mount static files if directory exists
+# Static files
 if static_dir.exists():
-    routes.append(Mount("/static", StaticFiles(directory=str(static_dir)), name="static"))
-else:
-    logger.warning(f"Static directory not found at {static_dir}")
+    base_routes.append(Mount("/static", StaticFiles(directory=static_dir)))
 
-
+# Middleware
 middleware = [
     Middleware(
         CORSMiddleware,
         allow_origins=["*"] if config["DEBUG"] else ["https://finder.green"],
-        allow_methods=["*"] if config["DEBUG"] else ["GET", "POST", "OPTIONS"],
-        allow_headers=["*"] if config["DEBUG"] else ["Content-Type"],
-        max_age=600 if not config["DEBUG"] else None
+        allow_methods=["GET", "POST", "OPTIONS"],
+        allow_headers=["*"],
+        max_age=600
     ),
     Middleware(
         CSRFMiddleware,
-        secret=os.getenv("CSRF_SECRET_KEY"),  # Add to your .env
+        secret=config["CSRF_SECRET_KEY"],
         sensitive_cookies=["session"],
         safe_methods={"GET", "HEAD", "OPTIONS"}
     )
 ]
 
+# Create app with base routes
 app = Starlette(
     debug=config["DEBUG"],
-    routes=routes,
-    middleware=middleware  # This replaces the separate add_middleware calls
+    routes=base_routes,
+    middleware=middleware
 )
 
-
-if config["DEBUG"]:
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=["*"],
-        allow_methods=["*"],
-        allow_headers=["*"]
-    )
-else:
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=["https://finder.green"],
-        allow_methods=["GET", "POST", "OPTIONS"],
-        allow_headers=["Content-Type"],
-        max_age=600
-    )
-
+# Add debug routes after app creation
+app.router.routes.append(
+    Route("/debug-routes", lambda _: JSONResponse({
+        "routes": [
+            {
+                "path": route.path,
+                "methods": sorted(list(getattr(route, "methods", ["GET"]))),  # Convert set to sorted list
+                "name": getattr(route, "name", ""),
+                "type": route.__class__.__name__
+            }
+            for route in app.routes
+        ]
+    }), name="debug_routes")
+)
 
 if __name__ == "__main__":
     import uvicorn

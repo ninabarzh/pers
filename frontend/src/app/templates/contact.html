@@ -1,5 +1,26 @@
 {% extends "base.html" %}
 
+{% block extra_js %}
+<script src="https://unpkg.com/friendly-challenge@0.9.12/widget.module.min.js"
+        async
+        defer
+        onload="console.log('FriendlyCaptcha loaded!')"
+        onerror="console.error('Failed to load FriendlyCaptcha')">
+</script>
+
+<script>
+// Global captcha state
+let isCaptchaVerified = false;
+
+// Callback when captcha completes
+function onCaptchaVerified(solution) {
+    isCaptchaVerified = true;
+    console.log("Captcha verified with token:", solution.substring(0, 10) + "...");
+    document.getElementById('captchaError').classList.add('d-none');
+}
+</script>
+{% endblock %}
+
 {% block title %}Contact Us - Finder.green{% endblock %}
 
 {% block content %}
@@ -13,7 +34,7 @@
                 <div class="card-body">
                     <div class="row">
                         <div class="col-md-8 mx-auto">
-                            <form id="contactForm" method="POST" action="/contact">
+                            <form id="contactForm" method="POST" action="/contact">  <!-- Changed from url_for() -->
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 
                                 <!-- Name Field -->
@@ -60,10 +81,14 @@
 
                                 <!-- ===== FRIENDLY CAPTCHA ===== -->
                                 <div class="mb-3">
-                                    <script src="https://unpkg.com/friendly-challenge@0.9.12/widget.module.min.js" async defer></script>
-                                    <div class="frc-captcha" data-sitekey="{{ FRIENDLY_CAPTCHA_SITE_KEY }}"></div>
+                                    <div class="frc-captcha"
+                                         data-sitekey="{{ FRIENDLY_CAPTCHA_SITE_KEY }}"
+                                         data-start="none"
+                                         data-callback="onCaptchaVerified"
+                                         style="min-height: 80px;">
+                                    </div>
                                     <div id="captchaError" class="text-danger small mb-3 d-none">
-                                        Please complete the captcha verification.
+                                        Please complete the verification.
                                     </div>
                                 </div>
                                 <!-- ============================ -->
@@ -85,90 +110,66 @@
 </div>
 
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-    const form = document.getElementById('contactForm');
+// Form submission handler
+document.getElementById('contactForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    const form = this;
+    const captchaWidget = document.querySelector('.frc-captcha');
+
+    if (!isCaptchaVerified) {
+        document.getElementById('captchaError').classList.remove('d-none');
+        if (!captchaWidget.dataset.started && window.FriendlyCaptcha) {
+            window.FriendlyCaptcha.start(captchaWidget);
+        }
+        captchaWidget.scrollIntoView({ behavior: 'smooth' });
+        return;
+    }
+
+    // Prepare loading state
     const submitBtn = document.getElementById('submitBtn');
-    const feedbackDiv = document.getElementById('formFeedback');
-    const captchaError = document.getElementById('captchaError');
+    submitBtn.disabled = true;
+    const originalBtnText = submitBtn.innerHTML;
+    submitBtn.innerHTML = `
+        <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+        Sending...
+    `;
 
-    form.addEventListener('submit', async function(e) {
-        e.preventDefault();
-        captchaError.classList.add('d-none');
-        feedbackDiv.innerHTML = '';
-
-        if (!form.checkValidity()) {
-            e.stopPropagation();
-            form.classList.add('was-validated');
-            return;
-        }
-
-        // Get the captcha solution
-        const frcCaptcha = document.querySelector('.frc-captcha');
-        const solution = frcCaptcha?.dataset?.solution;
-
-        if (!solution) {
-            captchaError.classList.remove('d-none');
-            window.scrollTo({
-                top: frcCaptcha.offsetTop - 100,
-                behavior: 'smooth'
-            });
-            return;
-        }
-
-        const formData = new FormData(form);
-        formData.append('frc-captcha-solution', solution);
-
-        submitBtn.disabled = true;
-        const originalBtnText = submitBtn.innerHTML;
-        submitBtn.innerHTML = `
-            <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-            Sending...
+    // Send the request
+    fetch(form.action, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'X-CSRF-Token': '{{ csrf_token }}'
+        },
+        body: new URLSearchParams(new FormData(form))
+    })
+    .then(response => {
+        if (!response.ok) throw new Error(response.statusText);
+        return response.json();
+    })
+    .then(data => {
+        document.getElementById('formFeedback').innerHTML = `
+            <div class="alert alert-success">
+                Message sent successfully!
+            </div>
         `;
-
-        try {
-            const response = await fetch(form.action, {
-                method: 'POST',
-                body: formData,
-                headers: {
-                    'Accept': 'application/json',
-                    'X-CSRF-Token': '{{ csrf_token }}'
-                }
-            });
-
-            const result = await response.json();
-
-            if (response.ok) {
-                feedbackDiv.innerHTML = `
-                    <div class="alert alert-success">
-                        Message sent successfully!
-                    </div>
-                `;
-                form.reset();
-                form.classList.remove('was-validated');
-                // Reset the captcha if needed
-                if (window.friendlyChallenge) {
-                    window.friendlyChallenge.reset();
-                }
-            } else {
-                feedbackDiv.innerHTML = `
-                    <div class="alert alert-danger">
-                        ${result.detail || 'Error sending message'}
-                    </div>
-                `;
-                if (result.errors?.captcha) {
-                    captchaError.classList.remove('d-none');
-                }
-            }
-        } catch (error) {
-            feedbackDiv.innerHTML = `
-                <div class="alert alert-danger">
-                    Network error. Please try again.
-                </div>
-            `;
-        } finally {
-            submitBtn.disabled = false;
-            submitBtn.innerHTML = originalBtnText;
+        form.reset();
+        form.classList.remove('was-validated');
+        isCaptchaVerified = false;
+        if (window.friendlyChallenge) {
+            window.friendlyChallenge.reset();
         }
+    })
+    .catch(error => {
+        document.getElementById('formFeedback').innerHTML = `
+            <div class="alert alert-danger">
+                Error: ${error.message || 'Failed to send message'}
+            </div>
+        `;
+    })
+    .finally(() => {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = originalBtnText;
     });
 });
 </script>
