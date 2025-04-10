@@ -435,5 +435,5 @@ body {
 /* Friendly captcha */
 .frc-captcha {
     margin: 1rem 0;
-    min-height: 50px; /* Prevent layout shift */
+    min-height: 80px; /* Prevent layout shift */
 }

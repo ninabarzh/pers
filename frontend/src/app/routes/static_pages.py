@@ -14,9 +14,9 @@ def get_base_context(request: Request, active_page: str = ""):
     """Shared context for all pages"""
     return {
         "request": request,
+        "config": request.app.state.config,
         "active_page": active_page,
         "now": datetime.now(),  # For last updated dates
-        "FRIENDLY_CAPTCHA_SITE_KEY": os.getenv("FRIENDLY_CAPTCHA_SITE_KEY")  # Add hCaptcha key to base
     }
 
 
@@ -30,13 +30,12 @@ async def about(request: Request):
 
 async def contact(request: Request):
     """Handle GET requests for contact page"""
-    context = {
-        "request": request,
-        "active_page": "contact",
-        "FRIENDLY_CAPTCHA_SITE_KEY": os.getenv("FRIENDLY_CAPTCHA_SITE_KEY"),
+    context = get_base_context(request, "contact")
+    context.update({
+        "FRIENDLY_CAPTCHA_SITE_KEY": request.app.state.config["FRIENDLY_CAPTCHA_SITE_KEY"],
         "csrf_token": request.cookies.get("csrftoken", ""),
-        "BACKEND_URL": os.getenv("BACKEND_URL", "http://localhost:8000")  # Add this line
-    }
+        "BACKEND_URL": request.app.state.config["BACKEND_URL"]
+    })
     return templates.TemplateResponse("contact.html", context)
 
 

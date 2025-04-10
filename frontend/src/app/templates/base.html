@@ -3,62 +3,79 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="{% block description %}Find eco-friendly alternatives and sustainable solutions{% endblock %}">
 
     <title>{% block title %}Green Finder{% endblock %}</title>
+
+    <!-- Preload critical resources -->
+    <link rel="preload" href="/static/css/bootstrap.min.css" as="style">
+    <link rel="preload" href="/static/js/bootstrap.bundle.min.js" as="script">
+
+    <!-- Favicon (add your own) -->
+    <link rel="icon" href="/static/favicon.ico" type="image/x-icon">
+
     <link rel="stylesheet" href="/static/css/bootstrap.min.css">
     <link rel="stylesheet" href="/static/css/styles.css">
     <link rel="stylesheet" href="/static/fonts/bootstrap-icons.css">
     {% block extra_css %}{% endblock %}
 </head>
-<body class="page-body">
+<body class="d-flex flex-column min-vh-100">  <!-- Changed for better footer handling -->
 
     <!-- Navigation Bar -->
-    <nav class="navbar navbar-expand-lg navbar-light bg-light">
-      <div class="container-fluid">
-        <a class="navbar-brand" href="#">Find Greener</a>
-        <button class="navbar-toggler" type="button"
-                data-bs-toggle="collapse"
-                data-bs-target="#navbarContent"
-                aria-controls="navbarContent"
-                aria-expanded="false"
-                aria-label="Toggle navigation">
-          <span class="navbar-toggler-icon"></span>
-        </button>
-        <div class="collapse navbar-collapse" id="navbarContent">
-          <ul class="navbar-nav me-auto mb-2 mb-lg-0">
-            <li class="nav-item">
-              <a class="nav-link" href="/">Home</a>
-            </li>
-          </ul>
+    <nav class="navbar navbar-expand-lg navbar-light bg-light sticky-top">  <!-- Added sticky-top -->
+        <div class="container">
+            <a class="navbar-brand" href="/">Find Greener</a>  <!-- Link to home -->
+            <button class="navbar-toggler" type="button"
+                    data-bs-toggle="collapse"
+                    data-bs-target="#navbarContent">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarContent">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/">Home</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/about">About</a>
+                    </li>
+                </ul>
+            </div>
         </div>
-      </div>
     </nav>
 
     <!-- Main Content -->
-    <div class="container main-content">
-        {% block content %}{% endblock %}
-    </div>
+    <main class="flex-grow-1">  <!-- Changed container to main for semantics -->
+        <div class="container py-4">  <!-- Added padding -->
+            {% block content %}{% endblock %}
+        </div>
+    </main>
 
     <!-- Footer -->
-    <footer class="footer custom-footer">
-      <div class="container">
-        <div class="footer-content">
-          <div class="footer-links">
-            <a href="/about">About</a>
-            <a href="/privacy">Privacy Policy</a>
-            <a href="/terms">Terms of Service</a>
-            <a href="/contact">Contact</a>
-          </div>
-          <div class="footer-copyright">
-            <i class="bi bi-c-circle"></i>
-            <span>2025 Made with love</span>
-          </div>
+    <footer class="footer bg-light mt-auto py-4">
+        <div class="container">
+            <div class="d-flex flex-column align-items-center text-center">
+                <!-- Larger Logo (changed height from 40px to 60px) -->
+                <div class="mb-3">
+                    <img src="/static/images/logo.png" alt="Green Finder Logo" class="img-fluid" style="max-height: 60px;">
+                </div>
+
+                <!-- Green Links -->
+                <div class="d-flex flex-wrap justify-content-center gap-3 mb-3">
+                    <a href="/about" class="text-decoration-none text-success">About</a>
+                    <a href="/privacy" class="text-decoration-none text-success">Privacy Policy</a>
+                    <a href="/terms" class="text-decoration-none text-success">Terms</a>
+                    <a href="/contact" class="text-decoration-none text-success">Contact</a>
+                </div>
+
+                <!-- Copyright -->
+                <div class="text-muted small">
+                    <i class="bi bi-c-circle"></i> 2025 Made with love
+                </div>
+            </div>
         </div>
-      </div>
     </footer>
 
-
-    <script src="/static/js/bootstrap.bundle.min.js"></script>
+    <script src="/static/js/bootstrap.bundle.min.js" defer></script>  <!-- Added defer -->
     {% block extra_js %}{% endblock %}
 </body>
 </html>

@@ -7,7 +7,7 @@
         onerror="handleCaptchaLoadError()"></script>
 <script>
 // Configuration
-const BACKEND_URL = '{{ BACKEND_URL }}';
+const BACKEND_URL = '{{ config.BACKEND_URL }}';
 let captchaSolution = '';
 let isSubmitting = false;
 
@@ -90,51 +90,55 @@ async function submitForm() {
 
 {% block content %}
 <div class="container py-5">
-    <h1 class="mb-4">Contact Us</h1>
+    <div class="row justify-content-center">
+        <div class="col-lg-10">
+            <h1 class="mb-4">Contact Us</h1>
 
-    <div id="form-feedback" class="mb-4" style="display: none;"></div>
+            <div id="form-feedback" class="mb-4" style="display: none;"></div>
 
-    <form id="contact-form" novalidate>
-        <!-- CSRF Token -->
-        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <form id="contact-form" novalidate>
+                <!-- CSRF Token -->
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 
-        <!-- Name -->
-        <div class="mb-3">
-            <label class="form-label">Name *</label>
-            <input type="text" name="name" class="form-control" required>
+                <!-- Name -->
+                <div class="mb-3">
+                    <label class="form-label">Name *</label>
+                    <input type="text" name="name" class="form-control" required>
+                </div>
+
+                <!-- Email -->
+                <div class="mb-3">
+                    <label class="form-label">Email *</label>
+                    <input type="email" name="email" class="form-control" required>
+                </div>
+
+                <!-- Message -->
+                <div class="mb-3">
+                    <label class="form-label">Message *</label>
+                    <textarea name="message" class="form-control" rows="5" required></textarea>
+                </div>
+
+                <!-- Consent -->
+                <div class="mb-3 form-check">
+                    <input type="checkbox" name="consent" class="form-check-input" required>
+                    <label class="form-check-label">I agree to the privacy policy *</label>
+                </div>
+
+                <!-- Captcha -->
+                <div class="frc-captcha mb-3"
+                     data-sitekey="{{ config.FRIENDLY_CAPTCHA_SITE_KEY }}"
+                     data-callback="onCaptchaVerified"
+                     data-start="none"></div>
+                <div id="captcha-error" class="text-danger d-none">
+                    Please complete the security verification
+                </div>
+
+                <button type="submit" class="btn btn-primary" id="submit-btn">
+                    Send Message
+                </button>
+            </form>
         </div>
-
-        <!-- Email -->
-        <div class="mb-3">
-            <label class="form-label">Email *</label>
-            <input type="email" name="email" class="form-control" required>
-        </div>
-
-        <!-- Message -->
-        <div class="mb-3">
-            <label class="form-label">Message *</label>
-            <textarea name="message" class="form-control" rows="5" required></textarea>
-        </div>
-
-        <!-- Consent -->
-        <div class="mb-3 form-check">
-            <input type="checkbox" name="consent" class="form-check-input" required>
-            <label class="form-check-label">I agree to the privacy policy *</label>
-        </div>
-
-        <!-- Captcha -->
-        <div class="frc-captcha mb-3"
-             data-sitekey="{{ FRIENDLY_CAPTCHA_SITE_KEY }}"
-             data-callback="onCaptchaVerified"
-             data-start="none"></div>
-        <div id="captcha-error" class="text-danger d-none">
-            Please complete the security verification
-        </div>
-
-        <button type="submit" class="btn btn-primary" id="submit-btn">
-            Send Message
-        </button>
-    </form>
+    </div>
 </div>
 
 <script>
