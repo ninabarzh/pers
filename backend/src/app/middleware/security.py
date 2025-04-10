@@ -12,29 +12,39 @@ class CORSMiddlewareNew(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next) -> Response:
         response = await call_next(request) if request.method != "OPTIONS" else Response()
 
-        # Set CORS headers
-        allowed_origins = [
-            'http://localhost:8080',
-            'http://127.0.0.1:8001',
-            'http://localhost:8001',  # Add this
-            'https://finder.green'
-        ]
+        # Auto-configure allowed origins
+        is_dev = os.getenv('DEBUG', 'false').lower() in ('true', '1', 't')
         origin = request.headers.get('origin')
 
-        # Allow any origin in debug mode
-        if os.getenv('DEBUG', 'false').lower() in ('true', '1', 't'):
-            response.headers['Access-Control-Allow-Origin'] = origin or '*'
-            response.headers['Access-Control-Allow-Credentials'] = 'true'
-        elif origin in allowed_origins:
-            response.headers['Access-Control-Allow-Origin'] = origin
-            response.headers['Access-Control-Allow-Credentials'] = 'true'
+        # Development: Allow common dev origins + local network
+        if is_dev:
+            dev_origins = [
+                'http://localhost:8080',
+                'http://127.0.0.1:8001',
+                'http://localhost:8001',
+                'http://0.0.0.0:8001',
+                'http://backend:8000'  # Docker internal
+            ]
+            if origin in dev_origins or not origin:
+                response.headers['Access-Control-Allow-Origin'] = origin or '*'
 
-        response.headers.update({
-            'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-            'Access-Control-Allow-Headers': 'Content-Type, X-CSRF-Token, Origin',
-            'Access-Control-Expose-Headers': 'Set-Cookie',
-            'Access-Control-Max-Age': '600'
-        })
+        # Production: Strict origin check
+        else:
+            prod_origins = [
+                'https://finder.green',
+                'https://www.finder.green'
+            ]
+            if origin in prod_origins:
+                response.headers['Access-Control-Allow-Origin'] = origin
+
+        # Common headers
+        if 'Access-Control-Allow-Origin' in response.headers:
+            response.headers.update({
+                'Access-Control-Allow-Credentials': 'true',
+                'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+                'Access-Control-Allow-Headers': 'Content-Type, X-CSRF-Token, Origin',
+                'Access-Control-Max-Age': '600'
+            })
 
         return response
 
