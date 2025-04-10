@@ -20,6 +20,14 @@ COPY pyproject.toml ./
 # Copy application code
 COPY src/ ./src/
 
+# Process static files
+RUN mkdir -p /var/www/static && \
+    cp -r src/app/static/* /var/www/static/ && \
+    chown -R 1001:1001 /var/www/static && \  # Match nginx user
+    find /var/www/static -type d -exec chmod 755 {} \; && \
+    find /var/www/static -type f -exec chmod 644 {} \; && \
+    find /var/www/static -type f \( -name "*.css" -o -name "*.js" \) -exec gzip -9 -k {} \;
+
 # Install dependencies
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir .
