@@ -107,7 +107,7 @@ jobs:
           FRIENDLY_CAPTCHA_SITE_KEY=${{ secrets.FRIENDLY_CAPTCHA_SITE_KEY }}
           FRIENDLY_CAPTCHA_SECRET=${{ secrets.FRIENDLY_CAPTCHA_SECRET }}
           CSRF_SECRET_KEY=${{ secrets.CSRF_SECRET_KEY }}
-          ALLOWED_ORIGINS=${{ ALLOWED_ORIGINS }}
+          ALLOWED_ORIGINS=${{ secrets.ALLOWED_ORIGINS }}
 
           TYPESENSE_API_KEY=${{ secrets.PROD_TYPESENSE_API_KEY }}
           TYPESENSE_HOST=typesense
