@@ -41,7 +41,7 @@ load_environment()
 app_config = {
     "PORT": config("FRONTEND_PORT", default=8001, cast=int),
     "DEBUG": config("DEBUG", default=False, cast=bool),
-    "STATIC_DIR": "/app/src/app/static",
+    "STATIC_DIR": "/var/www/static",
     "BACKEND_URL": config("BACKEND_URL", default="http://localhost:8080"),
     "FRIENDLY_CAPTCHA_SITE_KEY": config("FRIENDLY_CAPTCHA_SITE_KEY", default=""),
     "CSRF_SECRET_KEY": config("CSRF_SECRET_KEY", default="")
