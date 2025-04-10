@@ -35,18 +35,3 @@ services:
     command: ["./run_tests.sh"]
     networks:
       - app-network
-
-  # Development NGINX Proxy
-  nginx:
-    image: nginx:stable-perl  # Stable NGINX with Perl
-    container_name: nginx-dev
-    ports:
-      - "8080:8080"  # Non-privileged port for dev
-    volumes:
-      - ./nginx/nginx.dev.conf:/etc/nginx/nginx.conf  # Dev-specific config
-      - ./frontend/src/app/static:/var/www/static  # Static files
-    depends_on:
-      - frontend
-      - backend
-    networks:
-      - app-network

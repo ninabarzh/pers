@@ -1,6 +1,7 @@
 # frontend/src/app/routes/static_pages.py
 from starlette.templating import Jinja2Templates
 from starlette.requests import Request
+from starlette.responses import JSONResponse
 from datetime import datetime
 import os
 import logging
@@ -28,16 +29,15 @@ async def about(request: Request):
 
 
 async def contact(request: Request):
-    """Contact page with Friendly Captcha integration"""
-    context = get_base_context(request, "contact")  # Preserve your existing context
-    context.update({
-        "meta_title": "Contact Us - Pers",  # Keep your meta title
-        "FRIENDLY_CAPTCHA_SITE_KEY": os.getenv("FRIENDLY_CAPTCHA_SITE_KEY")  # Add captcha key
-    })
-    return templates.TemplateResponse(
-        "contact.html",
-        context
-    )
+    """Handle GET requests for contact page"""
+    context = {
+        "request": request,
+        "active_page": "contact",
+        "FRIENDLY_CAPTCHA_SITE_KEY": os.getenv("FRIENDLY_CAPTCHA_SITE_KEY"),
+        "csrf_token": request.cookies.get("csrftoken", ""),
+        "BACKEND_URL": os.getenv("BACKEND_URL", "http://localhost:8000")  # Add this line
+    }
+    return templates.TemplateResponse("contact.html", context)
 
 
 async def privacy(request: Request):

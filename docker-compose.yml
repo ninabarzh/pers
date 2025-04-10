@@ -90,10 +90,34 @@ services:
     networks:
       - app-network
 
+  # Development NGINX Proxy
+  nginx:
+    image: nginx:stable-perl
+    container_name: nginx-dev
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./nginx/nginx.dev.conf:/etc/nginx/nginx.conf
+      - ./frontend/src/app/static:/var/www/static
+      - ./nginx/logs:/var/log/nginx
+    depends_on:
+      - frontend
+      - backend
+    networks:
+      - app-network
+    command: ["nginx", "-g", "daemon off;"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
 # Network configuration
 networks:
   app-network:
     driver: bridge  # Default bridge network for inter-container communication
+    name: pers-network  # Add explicit name
+    attachable: true
 
 # Volume declarations
 volumes:

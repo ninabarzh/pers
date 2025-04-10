@@ -2,182 +2,165 @@
 
 {% block extra_js %}
 <script src="https://unpkg.com/friendly-challenge@0.9.12/widget.module.min.js"
-        async
-        defer
-        onload="console.log('FriendlyCaptcha loaded!')"
-        onerror="console.error('Failed to load FriendlyCaptcha')">
-</script>
-
+        async defer
+        onload="initFriendlyCaptcha()"
+        onerror="handleCaptchaLoadError()"></script>
 <script>
-// Global captcha state
-let isCaptchaVerified = false;
+// Configuration
+const BACKEND_URL = '{{ BACKEND_URL }}';
+let captchaSolution = '';
+let isSubmitting = false;
 
-// Callback when captcha completes
+function initFriendlyCaptcha() {
+    const widget = document.querySelector('.frc-captcha');
+    if (widget) {
+        widget.dataset.start = "none";  // Disable auto-start
+    }
+}
+
+function handleCaptchaLoadError() {
+    showFeedback('Security verification failed to load. Please refresh.', 'danger');
+}
+
 function onCaptchaVerified(solution) {
-    isCaptchaVerified = true;
-    console.log("Captcha verified with token:", solution.substring(0, 10) + "...");
-    document.getElementById('captchaError').classList.add('d-none');
+    if (!solution) {
+        console.error("Empty captcha solution received");
+        return;
+    }
+    captchaSolution = solution;
+    document.getElementById('captcha-error').classList.add('d-none');
+}
+
+function showFeedback(message, type) {
+    const feedbackEl = document.getElementById('form-feedback');
+    feedbackEl.innerHTML = `<div class="alert alert-${type}">${message}</div>`;
+    feedbackEl.style.display = 'block';
+
+    // Auto-hide success messages after 5 seconds
+    if (type === 'success') {
+        setTimeout(() => {
+            feedbackEl.style.display = 'none';
+        }, 5000);
+    }
+}
+
+async function submitForm() {
+    if (isSubmitting) return;
+    isSubmitting = true;
+
+    const form = document.getElementById('contact-form');
+    const submitBtn = document.getElementById('submit-btn');
+    const originalBtnText = submitBtn.innerHTML;
+
+    try {
+        const formData = new FormData(form);
+        if (!captchaSolution) {
+            throw new Error("Please complete the captcha");
+        }
+        formData.append('frc-captcha-solution', captchaSolution);
+
+        const response = await fetch(`${BACKEND_URL}/contact`, {
+            method: 'POST',
+            body: formData,
+            credentials: 'include',
+            headers: {
+                'Origin': window.location.origin
+            }
+        });
+
+        if (!response.ok) {
+            const error = await response.json().catch(() => ({ detail: 'Unknown error' }));
+            throw new Error(error.detail || `HTTP error! status: ${response.status}`);
+        }
+
+        showFeedback('Message sent successfully!', 'success');
+        form.reset();
+        captchaSolution = '';
+    } catch (error) {
+        console.error('Submission error:', error);
+        showFeedback(error.message || 'Failed to send message', 'danger');
+    } finally {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = originalBtnText;
+        isSubmitting = false;
+    }
 }
 </script>
 {% endblock %}
 
-{% block title %}Contact Us - Finder.green{% endblock %}
-
 {% block content %}
 <div class="container py-5">
-    <div class="row justify-content-center">
-        <div class="col-lg-8">
-            <div class="card shadow-sm">
-                <div class="card-header bg-light">
-                    <h2 class="h4 mb-0">Get in touch</h2>
-                </div>
-                <div class="card-body">
-                    <div class="row">
-                        <div class="col-md-8 mx-auto">
-                            <form id="contactForm" method="POST" action="/contact">  <!-- Changed from url_for() -->
-                                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <h1 class="mb-4">Contact Us</h1>
 
-                                <!-- Name Field -->
-                                <div class="mb-3">
-                                    <label for="name" class="form-label">Name</label>
-                                    <input type="text" class="form-control" id="name" name="name"
-                                           required minlength="2" maxlength="100"
-                                           pattern="[A-Za-z\s\-']+">
-                                    <div class="invalid-feedback">
-                                        Please provide a valid name (2-100 characters, letters only).
-                                    </div>
-                                </div>
+    <div id="form-feedback" class="mb-4" style="display: none;"></div>
 
-                                <!-- Email Field -->
-                                <div class="mb-3">
-                                    <label for="email" class="form-label">Email</label>
-                                    <input type="email" class="form-control" id="email" name="email"
-                                           required pattern="^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$">
-                                    <div class="invalid-feedback">
-                                        Please provide a valid email address.
-                                    </div>
-                                </div>
+    <form id="contact-form" novalidate>
+        <!-- CSRF Token -->
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 
-                                <!-- Message Field -->
-                                <div class="mb-3">
-                                    <label for="message" class="form-label">Message</label>
-                                    <textarea class="form-control" id="message" name="message"
-                                              rows="5" required minlength="10" maxlength="2000"></textarea>
-                                    <div class="invalid-feedback">
-                                        Please write a message (10-2000 characters).
-                                    </div>
-                                </div>
-
-                                <!-- Consent Checkbox -->
-                                <div class="mb-3 form-check">
-                                    <input type="checkbox" class="form-check-input" id="consent" name="consent" required>
-                                    <label class="form-check-label" for="consent">
-                                        I consent to Finder.green storing my data to respond to this inquiry
-                                    </label>
-                                    <div class="invalid-feedback">
-                                        You must agree before submitting.
-                                    </div>
-                                </div>
-
-                                <!-- ===== FRIENDLY CAPTCHA ===== -->
-                                <div class="mb-3">
-                                    <div class="frc-captcha"
-                                         data-sitekey="{{ FRIENDLY_CAPTCHA_SITE_KEY }}"
-                                         data-start="none"
-                                         data-callback="onCaptchaVerified"
-                                         style="min-height: 80px;">
-                                    </div>
-                                    <div id="captchaError" class="text-danger small mb-3 d-none">
-                                        Please complete the verification.
-                                    </div>
-                                </div>
-                                <!-- ============================ -->
-
-                                <!-- Form Feedback Area -->
-                                <div id="formFeedback" class="my-3"></div>
-
-                                <!-- Submit Button -->
-                                <button type="submit" class="btn btn-primary w-100" id="submitBtn">
-                                    <i class="bi bi-send me-2"></i>Send Message
-                                </button>
-                            </form>
-                        </div>
-                    </div>
-                </div>
-            </div>
+        <!-- Name -->
+        <div class="mb-3">
+            <label class="form-label">Name *</label>
+            <input type="text" name="name" class="form-control" required>
         </div>
-    </div>
+
+        <!-- Email -->
+        <div class="mb-3">
+            <label class="form-label">Email *</label>
+            <input type="email" name="email" class="form-control" required>
+        </div>
+
+        <!-- Message -->
+        <div class="mb-3">
+            <label class="form-label">Message *</label>
+            <textarea name="message" class="form-control" rows="5" required></textarea>
+        </div>
+
+        <!-- Consent -->
+        <div class="mb-3 form-check">
+            <input type="checkbox" name="consent" class="form-check-input" required>
+            <label class="form-check-label">I agree to the privacy policy *</label>
+        </div>
+
+        <!-- Captcha -->
+        <div class="frc-captcha mb-3"
+             data-sitekey="{{ FRIENDLY_CAPTCHA_SITE_KEY }}"
+             data-callback="onCaptchaVerified"
+             data-start="none"></div>
+        <div id="captcha-error" class="text-danger d-none">
+            Please complete the security verification
+        </div>
+
+        <button type="submit" class="btn btn-primary" id="submit-btn">
+            Send Message
+        </button>
+    </form>
 </div>
 
 <script>
-// Form submission handler
-document.getElementById('contactForm').addEventListener('submit', function(e) {
+document.getElementById('contact-form').addEventListener('submit', async (e) => {
     e.preventDefault();
-    const form = this;
-    const captchaWidget = document.querySelector('.frc-captcha');
+    const form = e.target;
 
-    if (!isCaptchaVerified) {
-        document.getElementById('captchaError').classList.remove('d-none');
-        if (!captchaWidget.dataset.started && window.FriendlyCaptcha) {
-            window.FriendlyCaptcha.start(captchaWidget);
-        }
-        captchaWidget.scrollIntoView({ behavior: 'smooth' });
+    // Validate form
+    form.classList.add('was-validated');
+    if (!form.checkValidity()) return;
+
+    // Verify captcha
+    if (!captchaSolution) {
+        document.getElementById('captcha-error').classList.remove('d-none');
         return;
     }
 
-    // Prepare loading state
-    const submitBtn = document.getElementById('submitBtn');
+    // Update UI
+    const submitBtn = document.getElementById('submit-btn');
     submitBtn.disabled = true;
-    const originalBtnText = submitBtn.innerHTML;
     submitBtn.innerHTML = `
-        <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+        <span class="spinner-border spinner-border-sm me-2"></span>
         Sending...
     `;
 
-    // Send the request - UPDATED TO USE apiUrl
-    fetch(apiUrl, {  // Changed from form.action
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
-            'X-CSRF-Token': '{{ csrf_token }}'
-        },
-        body: new URLSearchParams(new FormData(form)),
-        credentials: 'include'  // Important for CORS
-    })
-    .then(response => {
-        console.log('Raw response:', response);  // Added for debugging
-        if (!response.ok) {
-            return response.text().then(text => {
-                throw new Error(`HTTP ${response.status}: ${text}`);
-            });
-        }
-        return response.json();
-    })
-    .then(data => {
-        document.getElementById('formFeedback').innerHTML = `
-            <div class="alert alert-success">
-                Message sent successfully!
-            </div>
-        `;
-        form.reset();
-        form.classList.remove('was-validated');
-        isCaptchaVerified = false;
-        if (window.friendlyChallenge) {
-            window.friendlyChallenge.reset();
-        }
-    })
-    .catch(error => {
-        console.error('Full error:', error);  // Added for debugging
-        document.getElementById('formFeedback').innerHTML = `
-            <div class="alert alert-danger">
-                Error: ${error.message || 'Failed to send message'}
-            </div>
-        `;
-    })
-    .finally(() => {
-        submitBtn.disabled = false;
-        submitBtn.innerHTML = originalBtnText;
-    });
+    await submitForm();
 });
 </script>
 {% endblock %}

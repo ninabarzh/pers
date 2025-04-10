@@ -55,7 +55,7 @@ config = {
     "PORT": int(os.getenv('FRONTEND_PORT', 8001)),
     "DEBUG": os.getenv('DEBUG', 'false').lower() in ('true', '1', 't'),
     "STATIC_DIR": "/app/src/app/static",  # Absolute path in container
-    "BACKEND_URL": os.getenv('BACKEND_URL', 'http://localhost:8000')  # New config
+    "BACKEND_URL": os.getenv('BACKEND_URL', 'http://localhost:8000')  # Matching backend
 }
 
 # Check production variables are set

@@ -1,105 +1,93 @@
 # backend/src/app/routes/contact.py
 from starlette.requests import Request
 from starlette.responses import JSONResponse
-from starlette.datastructures import FormData
 from ..email import send_email, verify_friendly_captcha
 import os
 import logging
-import re
-from typing import Dict, Any, Pattern, Union
 
 logger = logging.getLogger(__name__)
 
 
-async def validate_form_data(form_data: Union[Dict[str, Any], FormData]) -> Dict[str, Any]:
-    required = {
-        'name': {'min': 2, 'max': 100},
-        'email': {'pattern': re.compile(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$')},
-        'message': {'min': 10, 'max': 2000},
-        'consent': {},
-        'frc-captcha-solution': {'optional': False}  # Explicitly mark as required
-    }
-
-    errors = {}
-    data = {}
-
-    form_dict = dict(form_data) if isinstance(form_data, FormData) else form_data
-
-    # Debug: Log all received fields
-    print("Received form fields:", form_dict.keys())
-
-    for field, rules in required.items():
-        value = form_dict.get(field, '').strip()
-
-        # Skip validation if field is marked optional and empty
-        if rules.get('optional') and not value:
-            continue
-
-        # Special handling for consent checkbox
-        if field == 'consent':
-            if not value or value.lower() not in ('true', 'on', '1'):
-                errors[field] = "You must agree before submitting"
-            continue
-
-        # Handle empty required fields
-        if not value:
-            errors[field] = "This field is required"
-            continue
-
-        # Store valid values
-        data[field] = value
-
-    # Additional debug
-    print("Captcha solution present:", 'frc-captcha-solution' in form_dict)
-
-    return {'data': data, 'errors': errors} if not errors else {'errors': errors}
-
-
 async def contact_post(request: Request):
-    """Process contact form submission"""
+    """Simplified contact handler with explicit validation"""
     try:
         form_data = await request.form()
-        validation = await validate_form_data(form_data)
+        logger.info("Received form data: %s", dict(form_data))
 
-        if 'errors' in validation:
+        # Debug mode bypass
+        debug_mode = os.getenv('DEBUG', 'false').lower() in ('true', '1', 't')
+        test_solution = debug_mode and form_data.get('frc-captcha-solution') == 'TEST_SOLUTION'
+
+        # Verify captcha unless in debug mode with test solution
+        if not test_solution:
+            if not await verify_friendly_captcha(form_data['frc-captcha-solution']):
+                logger.error("Captcha verification failed")
+                return JSONResponse(
+                    {"status": "error", "error": "Captcha verification failed"},
+                    status_code=400
+                )
+
+        # 1. Verify all required fields exist
+        required_fields = {
+            'name': str,
+            'email': str,
+            'message': str,
+            'consent': str,
+            'csrf_token': str,
+            'frc-captcha-solution': str
+        }
+
+        missing_fields = [
+            field for field in required_fields
+            if field not in form_data or not form_data[field].strip()
+        ]
+
+        if missing_fields:
+            logger.error("Missing fields: %s", missing_fields)
             return JSONResponse(
-                {"status": "error", "errors": validation['errors']},
+                {"status": "error", "missing_fields": missing_fields},
                 status_code=400
             )
 
-        # Verify friendly captcha
-        if not await verify_friendly_captcha(validation['data']['frc-captcha-solution']):
-            logger.warning(f"Failed Friendly Captcha from IP: {request.client.host}")
+        # 2. Verify consent
+        if form_data['consent'].lower() not in ['on', 'true', '1']:
+            logger.error("Consent not given")
             return JSONResponse(
-                {"status": "error", "detail": "CAPTCHA verification failed"},
+                {"status": "error", "error": "Consent required"},
                 status_code=400
             )
 
-        # Send email
-        email_body = f"""
-        New Contact Submission
-        {'-' * 40}
-        Name: {validation['data']['name']}
-        Email: {validation['data']['email']}
-        Message:
-        {validation['data']['message']}
-        {'-' * 40}
-        """
+        # 3. Handle captcha (skip in dev with TEST_SOLUTION)
+        if (os.getenv('DEBUG', 'false').lower() not in ('true', '1', 't') or
+                form_data['frc-captcha-solution'] != 'TEST_SOLUTION'):
 
-        success = await send_email(
+            if not await verify_friendly_captcha(form_data['frc-captcha-solution']):
+                logger.error("Captcha verification failed")
+                return JSONResponse(
+                    {"status": "error", "error": "Captcha verification failed"},
+                    status_code=400
+                )
+
+        # 4. Send email
+        email_sent = await send_email(
             to=os.getenv("CONTACT_RECIPIENT", "green@tymyrddin.dev"),
-            subject=f"New contact from {validation['data']['name']}",
-            body=email_body
+            subject=f"New contact from {form_data['name']}",
+            body=f"""New Contact Submission
+                   {'-' * 40}
+                   Name: {form_data['name']}
+                   Email: {form_data['email']}
+                   Message: {form_data['message']}
+                   {'-' * 40}"""
         )
 
-        if not success:
+        if not email_sent:
             raise RuntimeError("Email sending failed")
 
         return JSONResponse({"status": "success"})
 
     except Exception as e:
-        logger.error(f"Contact form error: {str(e)}", exc_info=True)
+        logger.error("Error processing contact form: %s", str(e), exc_info=True)
         return JSONResponse(
-            {"status": "error", "detail": "Message could not be sent"},
+            {"status": "error", "detail": str(e)},
             status_code=500
         )

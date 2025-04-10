@@ -2,6 +2,7 @@
 import smtplib
 import httpx
 import logging
+import os
 from email.message import EmailMessage
 from starlette.config import Config
 
@@ -12,37 +13,36 @@ config = Config(".env")  # Load environment variables
 async def verify_friendly_captcha(solution: str) -> bool:
     """Verify Friendly Captcha solution with proper error handling"""
     if not solution:
-        logger.warning("Empty CAPTCHA solution provided")
         return False
+
+    # Skip verification in debug mode with test solution
+    if os.getenv('DEBUG', 'false').lower() in ('true', '1', 't') and solution == "TEST_SOLUTION":
+        logger.warning("DEBUG MODE: Skipping captcha verification")
+        return True
 
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        data = {
+            "solution": solution,
+            "secret": os.getenv("FRIENDLY_CAPTCHA_API_KEY"),
+            "sitekey": os.getenv("FRIENDLY_CAPTCHA_SITE_KEY")
+        }
+
+        async with httpx.AsyncClient() as client:
             response = await client.post(
                 "https://api.friendlycaptcha.com/api/v1/siteverify",
-                json={
-                    "solution": solution,
-                    "secret": config("FRIENDLY_CAPTCHA_SECRET"),
-                    "sitekey": config("FRIENDLY_CAPTCHA_SITE_KEY")
-                }
+                json=data,
+                timeout=10.0
             )
+            result = response.json()
+            logger.debug(f"CAPTCHA API response: {result}")
 
-            logger.debug(f"CAPTCHA API response: {response.text}")
-
-            if response.status_code != 200:
-                logger.error(f"CAPTCHA API returned HTTP {response.status_code}")
+            if not response.is_success or not result.get("success"):
+                logger.warning(f"CAPTCHA verification failed: {result.get('errors', [])}")
                 return False
 
-            result = response.json()
-            if not result.get("success", False):
-                logger.warning(f"CAPTCHA verification failed: {result.get('errors', 'Unknown error')}")
-            return result["success"]
-
-    except httpx.ReadTimeout:
-        logger.error("CAPTCHA verification timed out")
-        return False
-
+            return True
     except Exception as e:
-        logger.error(f"CAPTCHA verification failed: {str(e)}", exc_info=True)
+        logger.error(f"Captcha verification error: {str(e)}")
         return False
 
 
