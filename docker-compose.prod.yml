@@ -93,6 +93,7 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile.prod
+    env_file: .env
     environment:
       - ENV=production
       - DEBUG=false
@@ -101,6 +102,7 @@ services:
       - CSRF_SECRET_KEY=${CSRF_SECRET_KEY}
     volumes:
       - static_volume:/var/www/static:rw
+      - /home/deploy/app/.env:/app/.env:ro
     deploy:
       resources:
         limits:
