@@ -23,7 +23,7 @@ async def verify_friendly_captcha(solution: str) -> bool:
     try:
         data = {
             "solution": solution,
-            "secret": os.getenv("FRIENDLY_CAPTCHA_API_KEY"),
+            "secret": os.getenv("FRIENDLY_CAPTCHA_SECRET"),
             "sitekey": os.getenv("FRIENDLY_CAPTCHA_SITE_KEY")
         }
 
