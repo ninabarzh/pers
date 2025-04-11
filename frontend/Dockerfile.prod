@@ -14,7 +14,7 @@ RUN apt-get update && \
 RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
-# Copy the files
+# Copy files
 COPY pyproject.toml .
 COPY src/ src/
 
