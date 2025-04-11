@@ -1,177 +1,128 @@
-# Pers - Green Finder or Greener Find Search Engine
+# Pers - Open Sustainability Search 
 
-Pers is a self-hosted search engine combining [Typesense](https://typesense.org/) (No PhD required) in the backend, 
-[Starlette](https://www.starlette.io/) with [Jinja2 templates](https://jinja.palletsprojects.com/en/stable/) in the 
-frontend, and [Docker](https://www.docker.com/) for containerization, deployed to 
-[Hetzner](https://www.hetzner.com/).
+**Self-hosted search for green technology**  
 
-A project started at the 
-[RIPE NCC Green Tech Hackathon](https://labs.ripe.net/author/becha/celebrating-green-tech-hackathon-results/), and 
-the first index is made from OSSFinder scraped data, also see [oss4climate](https://github.com/Pierre-VF/oss4climate).
+*Deployed at [finder.green](https://finder.green) | [Roadmap](https://github.com/ninabarzh/pers/wiki)*  
 
-## Current features
+## Core Technology  
 
-- Full-text search with typo tolerance
-- File upload & indexing (JSON)
-- Fast API backend with Starlette
-- Secure HTTPS with automatic Let's Encrypt
+### Search Engine  
+- **Typesense** for lightning-fast, typo-tolerant search  
+- Custom ranking for sustainability metrics  
+- Real-time index updates  
 
-## Prerequisites
+### Stack  
+| Component       | Technology          | Purpose                          |  
+|-----------------|---------------------|----------------------------------|  
+| **Backend**     | Python/Starlette    | Search API, data processing      |  
+| **Frontend**    | Jinja2 + Bootstrap  | Responsive interface             |  
+| **Infra**       | Docker + Nginx      | Scalable deployment              |  
 
-- Docker 20.10+
-- Docker Compose 2.0+
-- Python 3.10+ (for development)
-- Node.js 16+ (for frontend development)
+## Quick Start  
 
-## Development
-
-### Setup
-
-Clone the repository:
-
-```
-git clone https://github.com/ninabarzh/pers.git
-cd pers
+### Development  
+```bash  
+git clone https://github.com/ninabarzh/pers.git  
+cd pers  
+docker-compose -f docker-compose.yml up -d  
 ```
 
-Set up environment:
+This starts:  
 
-```
-cp .env.example .env
-```
+- Search API (8000)  
+- Typesense (8108)  
+- Web UI (8001) 
 
-Edit `.env` with your local values
+### Production Deployment
 
-Start services:
-
-```
-docker-compose -f docker-compose.yml up -d
-```
-
-Access services:
-
-* Frontend: http://localhost:8001
-* Backend API: http://localhost:8000
-* Typesense: http://localhost:8108
-
-### Development commands
-
-Run backend tests:
-
-```
-cd backend && ./run_tests.sh
-```
-
-Run frontend tests:
-
-```
-cd frontend && ./run_tests.sh
-```
-
-Rebuild containers:
-
-```
-docker-compose -f docker-compose.yml build --no-cache
-```
-
-View logs:
-
-```
-docker-compose logs -f
-```
-
-## Production deployment
-
-### Server preparation
-
-- Ubuntu 22.04 LTS
-- 2+ CPU cores
-- 4GB+ RAM
-- Domain name pointing to server
-
-### Deployment steps
-
-On your local machine:
-
-```
-git clone https://github.com/yourusername/pers.git
-cd pers
-```
-
-Set up deployment secrets:
-
-```
-echo "PROD_DOMAIN=yourdomain.com" >> .env.prod
-echo "PROD_TYPESENSE_API_KEY=$(openssl rand -hex 32)" >> .env.prod
-```
-
-Deploy to production:
-
-```
+```bash
 ./deploy.sh
 ```
+#### Requires:  
 
-3. Certificate Setup (First Time)
+- Ubuntu 22.04  
+- 4GB RAM  
+- Domain (DNS configured)  
 
+### Search Features
+
+#### Query Syntax
+
+| Example	          | Description                         |
+|-------------------|-------------------------------------|
+| renewable energy  | 	Basic term matching                |
+| [energy]	         | Field-specific search               |
+| linux ~2	         | Fuzzy match (2-character tolerance) |
+
+#### Indexing Pipeline
+
+Data Ingestion
+
+* OSSFinder climate projects
+* Custom CSV/JSON imports
+
+Normalization
+
+* Deduplication
+* Sustainability scoring
+
+Real-time Updates
+
+```python
+# Example Typesense update  
+client.collections['projects'].documents.upsert({  
+  'id': 'proj_123',  
+  'name': 'SolarMesh',  
+  'impact_score': 8.2  
+}) 
 ```
-ssh deploy@your-server
-cd ~/app
-chmod +x init-letsencrypt.sh
-./init-letsencrypt.sh
-```
 
-### Production URLs
+### Architecture
 
-- Web Interface: https://yourdomain.com
-- API: https://yourdomain.com/api
-- Admin: https://yourdomain.com/admin
-
-### File Structure
-
-```
-pers/
-├── backend/          # Python search backend
-├── frontend/         # Web interface
-├── nginx/            # Production web server config
-├── data/             # Persistent data
-├── docker-compose.yml       # Development setup
-├── docker-compose.prod.yml  # Production setup
-└── init-letsencrypt.sh      # SSL certificate setup
+```commandline
+pers/  
+├── backend/  
+│   ├── src/app/  
+│   │   ├── routes/search.py    # Query handling  
+│   │   └── typesense_client.py # Index management  
+├── frontend/  
+│   └── templates/search.html   # Results rendering  
+└── data/  
+    └── typesense/              # Persistent search indices  
 ```
 
 ### Maintenance
 
-Create backup of Typesense data:
+#### Backup/Restore
 
-```
-docker exec -it typesense-db tar czvf /data/typesense-backup.tar.gz /data/typesense
-```
+```bash
+# Backup  
+docker exec typesense-db \  
+  tar czvf /data/backup.tar.gz /data/typesense  
 
-### Monitoring
-
-View running containers:
-
-```
-docker compose -f docker-compose.prod.yml ps
+# Restore  
+docker exec -it typesense-db \  
+  tar xzvf /data/backup.tar.gz -C / 
 ```
 
-Check logs:
+#### Monitoring
 
+```bash
+# Check search latency  
+curl "http://localhost:8108/health"  
+
+# Log inspection  
+docker-compose logs -f typesense  
 ```
-docker compose -f docker-compose.prod.yml logs -f
-```
 
-### Troubleshooting
+### Why Self-Hosted?
 
-- Issue: Typesense fails to start
-- Fix: Check memory allocation - Typesense needs at least 2GB free memory
+* Privacy: No user tracking
+* Customization: Tailor rankings to your sustainability criteria
+* Offline Capable: Air-gapped deployment supported
 
-- Issue: Certificate generation fails
-- Fix: Verify port 80 is open and domain DNS is properly configured
+### License 
 
-- Issue: File uploads failing
-- Fix: Check client_max_body_size in nginx config
+This is free and unencumbered software released into the public domain (Unlicense).
 
-### License
 
-This is free and unencumbered software released into the public domain.
