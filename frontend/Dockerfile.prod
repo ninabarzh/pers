@@ -17,16 +17,17 @@ ENV PATH="/opt/venv/bin:$PATH"
 # Copy Python dependencies
 COPY pyproject.toml ./
 
-# Copy application code
-COPY src/ ./src/
-
 # Install dependencies
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir .
 
+# Copy application code
+COPY src/ ./src/
+
 # Process static files
 RUN mkdir -p /var/www/static && \
     cp -r src/app/static/* /var/www/static/ && \
+    ls -la /var/www/static && \
     find /var/www/static -type d -exec chmod 755 {} + && \
     find /var/www/static -type f -exec chmod 644 {} + && \
     find /var/www/static -type f \( -name "*.css" -o -name "*.js" -o -name "*.jpg" -o -name "*.jpeg" -o -name "*.png" -o -name "*.gif" -o -name "*.ico" \) \
