@@ -24,7 +24,15 @@ RUN pip install --no-cache-dir --upgrade pip && \
 
 # Process static files (compression happens here)
 RUN mkdir -p /var/www/static && \
-    cp -a src/app/static/. /var/www/static/ && \
+    # Explicitly copy each directory/file
+    cp -r src/app/static/css /var/www/static/ && \
+    cp -r src/app/static/fonts /var/www/static/ && \
+    cp -r src/app/static/js /var/www/static/ && \
+    cp -r src/app/static/images /var/www/static/ && \
+    cp src/app/static/favicon.ico /var/www/static/ && \
+    # Set proper ownership DURING BUILD
+    chown -R deploy:docker /var/www/static && \
+    # Then compress
     find /var/www/static -type f \( -name "*.css" -o -name "*.js" -o -name "*.jpg" -o -name "*.jpeg" -o -name "*.png" -o -name "*.gif" -o -name "*.ico" \) \
     -exec gzip -9 -k {} \;
 
