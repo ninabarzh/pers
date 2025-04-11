@@ -1,41 +1,75 @@
 #!/bin/bash
 set -euo pipefail
 
-# Clean up old volumes
-docker volume rm static_volume typesense_data 2>/dev/null || true
+# Load sensitive variables from environment (GitHub Secrets)
+REQUIRED_VARS=(
+  "PROD_DOMAIN"
+  "TYPESENSE_API_KEY"
+  "PROTON_SMTP_CREDENTIALS"
+  "FRIENDLY_CAPTCHA_SECRET"
+  "CSRF_SECRET_KEY"
+)
 
-# Remove old bind mounts
-rm -rf /opt/pers /data/static /data/typesense 2>/dev/null || true
+for var in "${REQUIRED_VARS[@]}"; do
+  if [ -z "${!var:-}" ]; then
+    echo "❌ Missing required variable: $var"
+    exit 1
+  fi
+done
 
-# Load environment variables
-export "$(grep -v '^#' .env | xargs)"
+# Cleanup with force removal
+echo "=== Cleaning previous deployment ==="
+docker-compose -f docker-compose.prod.yml down --volumes --remove-orphans --timeout 30 || true
+docker volume prune -f || true
+rm -rf /home/deploy/app_data/{typesense,static}/* 2>/dev/null || true
 
-# Create required directories with proper permissions
-sudo mkdir -p /home/deploy/app_data/{typesense,static,certbot}
+# Secure directory setup
+echo "=== Configuring filesystem ==="
+sudo mkdir -p \
+  /home/deploy/app_data/{typesense,static,certbot/{conf,www}} \
+  /home/deploy/app/nginx/config/dhparam
+
 sudo chown -R deploy:docker /home/deploy/app_data
-sudo chmod -R 775 /home/deploy/app_data
+sudo chmod -R 770 /home/deploy/app_data  # More restrictive than 775
 
-# Create nginx config directory
-sudo mkdir -p /home/deploy/app/nginx/config/dhparam
-sudo chown -R deploy:docker /home/deploy/app/nginx
-
-# Generate DH params if missing
+# DH params generation (cacheable)
 if [ ! -f "/home/deploy/app/nginx/config/dhparam/dhparam.pem" ]; then
-    sudo openssl dhparam -out /home/deploy/app/nginx/config/dhparam/dhparam.pem 2048
-    sudo chown deploy:docker /home/deploy/app/nginx/config/dhparam/dhparam.pem
+  echo "Generating DH parameters (2048-bit)..."
+  sudo openssl dhparam -out /home/deploy/app/nginx/config/dhparam/dhparam.pem 2048
+  sudo chown deploy:docker /home/deploy/app/nginx/config/dhparam/dhparam.pem
+  sudo chmod 600 /home/deploy/app/nginx/config/dhparam/dhparam.pem
 fi
 
-# Fix .env permissions
-sudo chown deploy:docker /home/deploy/app/.env
-sudo chmod 640 /home/deploy/app/.env
+# Deploy with build cache busting
+echo "=== Deploying services ==="
+docker-compose -f docker-compose.prod.yml build --no-cache --pull
+docker-compose -f docker-compose.prod.yml up -d --force-recreate
 
-# Stop any running containers
-docker-compose -f docker-compose.prod.yml down || true
+# Health verification with timeout
+echo "=== Verifying services ==="
+TIMEOUT=120
+INTERVAL=10
+ATTEMPTS=$((TIMEOUT/INTERVAL))
 
-# Pull the latest code
-git pull origin main
+for i in $(seq 1 $ATTEMPTS); do
+  if docker-compose -f docker-compose.prod.yml ps | grep -q "(healthy)"; then
+    break
+  fi
+  if [ $i -eq $ATTEMPTS ]; then
+    echo "❌ Services did not become healthy within $TIMEOUT seconds"
+    docker-compose -f docker-compose.prod.yml logs
+    exit 1
+  fi
+  sleep $INTERVAL
+done
 
-# Build and start containers
-docker-compose -f docker-compose.prod.yml up -d --build
+# Post-deployment checks
+echo "=== Running post-deployment checks ==="
+curl -sf https://$PROD_DOMAIN/health || {
+  echo "❌ Health check failed"
+  exit 1
+}
 
-echo "=== Deployment completed successfully ==="
+echo "✅ Deployment successful"
+echo "🌍 Production URL: https://$PROD_DOMAIN"
+echo "🔍 Typesense Dashboard: https://$PROD_DOMAIN:8108"
