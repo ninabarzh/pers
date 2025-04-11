@@ -28,7 +28,7 @@ RUN pip install --no-cache-dir --upgrade pip && \
 RUN mkdir -p /var/www/static && \
     cp -a /app/src/app/static/. /var/www/static/ && \
     ls -la /var/www/static && \
-    ls -la /var/www/static/images
+    ls -la /var/www/static/images && \
     find /var/www/static -type d -exec chmod 755 {} + && \
     find /var/www/static -type f -exec chmod 644 {} + && \
     find /var/www/static -type f \( -name "*.css" -o -name "*.js" -o -name "*.jpg" -o -name "*.jpeg" -o -name "*.png" -o -name "*.gif" -o -name "*.ico" \) \
