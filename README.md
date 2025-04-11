@@ -1,6 +1,6 @@
 # Pers - Open Sustainability Search 
 
-**Self-hosted search for green technology**  
+**Self-hosted search for greener technology, communities and houses**  
 
 *Deployed at [finder.green](https://finder.green) | [Roadmap](https://github.com/ninabarzh/pers/wiki)*  
 
@@ -35,10 +35,22 @@ This starts:
 
 ### Production Deployment
 
-```bash
-./deploy.sh
+To use with GitHub Actions: `./deploy.sh`
+
+```commandline
+- name: Deploy
+  env:
+    PROD_DOMAIN: ${{ secrets.PROD_DOMAIN }}
+    TYPESENSE_API_KEY: ${{ secrets.TYPESENSE_API_KEY }}
+    PROTON_SMTP_CREDENTIALS: ${{ secrets.PROTON_SMTP_CREDENTIALS }}
+    FRIENDLY_CAPTCHA_SECRET: ${{ secrets.FRIENDLY_CAPTCHA_SECRET }}
+    CSRF_SECRET_KEY: ${{ secrets.CSRF_SECRET_KEY }}
+  run: |
+    ssh deploy@${{ secrets.SERVER_IP }} "cd /home/deploy/app && ./deploy.sh"
 ```
-#### Requires:  
+But also see our somewhat more complex deploy.yml
+
+#### Deployment requirements  
 
 - Ubuntu 22.04  
 - 4GB RAM  
@@ -50,7 +62,7 @@ This starts:
 
 | Example	          | Description                         |
 |-------------------|-------------------------------------|
-| renewable energy  | 	Basic term matching                |
+| renewable energy  | Basic term matching                 |
 | [energy]	         | Field-specific search               |
 | linux ~2	         | Fuzzy match (2-character tolerance) |
 
