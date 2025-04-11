@@ -51,7 +51,7 @@ async def send_email(to: str, subject: str, body: str) -> bool:
     try:
         # Get configuration with defaults
         smtp_config = {
-            'host': config("SMTP_SERVER", default="smtp.protonmail.ch"),
+            'host': config("SMTP_SERVER", default="mail.protonmail.ch"),
             'port': config("SMTP_PORT", default=587, cast=int),
             'timeout': config("SMTP_TIMEOUT", default=10, cast=int),
             'creds': config("PROTON_SMTP_CREDENTIALS")

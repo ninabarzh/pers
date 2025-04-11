@@ -55,7 +55,7 @@ services:
       - TYPESENSE_PROTOCOL=http
       - STARTUP_DELAY=15
       - PROTON_SMTP_CREDENTIALS=${PROTON_SMTP_CREDENTIALS}  # Format: "green@tymyrddin.dev:token"
-      - SMTP_SERVER=smtp.protonmail.ch  # Proton's SMTP server
+      - SMTP_SERVER=mail.protonmail.ch  # Proton's SMTP server
       - SMTP_PORT=587                   # Proton's SMTP port
       - DEFAULT_FROM_EMAIL=green@tymyrddin.dev
       - CONTACT_RECIPIENT=green@tymyrddin.dev
