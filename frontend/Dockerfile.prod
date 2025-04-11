@@ -4,65 +4,49 @@ FROM python:3.12-slim AS builder
 
 WORKDIR /app
 
-# 1. First install system dependencies
+# Install system dependencies
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     gcc python3-dev gzip && \
     rm -rf /var/lib/apt/lists/*
 
-# 2. Create virtual environment
+# Create virtual environment
 RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
-# 3. Copy ONLY the requirements files first
-COPY pyproject.toml ./
+# Copy the files
+COPY pyproject.toml .
+COPY src/ src/
 
-# 4. Install Python dependencies
+# Install dependencies
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir .
 
-# 5. NOW copy the entire application code
-COPY src/ ./src/
-
-# 6. DEBUG: Verify static files exist before processing
-RUN echo "=== Verifying source files ===" && \
-    ls -la /app/src/app/static && \
-    ls -la /app/src/app/static/images || echo "No images dir" && \
-    [ -f /app/src/app/static/favicon.ico ] && echo "Favicon exists" || echo "Favicon missing"
-
-# 7. Process static files with explicit copy
+# Process static files (compression happens here)
 RUN mkdir -p /var/www/static && \
-    # Copy each component individually with verification
-    { [ -d /app/src/app/static/images ] && cp -a /app/src/app/static/images /var/www/static/ || echo "Warning: images dir missing"; } && \
-    { [ -f /app/src/app/static/favicon.ico ] && cp -a /app/src/app/static/favicon.ico /var/www/static/ || echo "Warning: favicon missing"; } && \
-    # Copy other known directories
-    cp -a /app/src/app/static/css /var/www/static/ && \
-    cp -a /app/src/app/static/fonts /var/www/static/ && \
-    cp -a /app/src/app/static/js /var/www/static/ && \
-    # Final verification
-    echo "=== Copied files ===" && \
-    ls -la /var/www/static && \
-    ls -la /var/www/static/images || echo "No images dir copied"
+    cp -a src/app/static/. /var/www/static/ && \
+    find /var/www/static -type f \( -name "*.css" -o -name "*.js" -o -name "*.jpg" -o -name "*.jpeg" -o -name "*.png" -o -name "*.gif" -o -name "*.ico" \) \
+    -exec gzip -9 -k {} \;
 
 # Stage 2: Runtime
 FROM python:3.12-slim
 
 WORKDIR /app
 
-# Create docker group and deploy user (matches host)
+# Create docker group and deploy user
 RUN groupadd -g 1001 docker && \
     useradd -u 1001 -g docker -m deploy -d /app
 
 # Copy virtual environment
 COPY --from=builder /opt/venv /opt/venv
 
-# Copy static files with correct ownership (from builder's /var/www/static)
+# Copy static files with correct ownership
 COPY --from=builder --chown=deploy:docker /var/www/static /var/www/static
 
 # Copy application code with correct ownership
 COPY --from=builder --chown=deploy:docker /app/src/ ./src/
 
-# Set permissions
+# Set FINAL permissions (only needed in runtime stage)
 RUN find /var/www/static -type d -exec chmod 755 {} \; && \
     find /var/www/static -type f -exec chmod 644 {} \; && \
     find ./src -type d -exec chmod 550 {} \; && \
