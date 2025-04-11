@@ -44,6 +44,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile.prod
+    env_file: .env
     environment:
       - ENV=production
       - DEBUG=false
