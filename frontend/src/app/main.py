@@ -65,10 +65,13 @@ except Exception as e:
     logger.error(f"Failed to create static directory: {e}")
     raise  # Re-raise the exception to fail fast in production
 
+async def health_check(request):
+    return JSONResponse({"status": "healthy"})
+
 # Application routes
 routes = [
     Route("/", home, methods=["GET"]),
-    Route("/health", lambda r: JSONResponse({"status": "healthy"})),
+    Route("/health", health_check, methods=["GET"]),
     Route("/admin", admin_dashboard, methods=["GET"]),
     Route("/admin", handle_admin_actions, methods=["POST"]),
     Route("/about", about, methods=["GET"]),

@@ -65,13 +65,17 @@ async function submitForm() {
         const headers = new Headers();
         if (csrfToken) headers.append('X-CSRFToken', csrfToken);
 
-        const response = await fetch('http://backend:8000/contact', {
+        const response = await fetch('//backend:8000/contact', {
             method: 'POST',
             body: formData,
             credentials: 'include',
               headers: {
-                'X-CSRFToken': Cookies.get('csrftoken')
+                'X-CSRFToken': Cookies.get('csrftoken'),
+                'Accept': 'application/json'
               }
+        }).catch(e => {
+          console.error('Network error:', e);
+          throw new Error('Cannot connect to server');
         });
 
         if (response.status === 413) {
