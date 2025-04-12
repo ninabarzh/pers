@@ -48,7 +48,7 @@ To use with GitHub Actions: `./deploy.sh`
   run: |
     ssh deploy@${{ secrets.SERVER_IP }} "cd /home/deploy/app && ./deploy.sh"
 ```
-But also see our somewhat more complex deploy.yml
+But also see the somewhat more complex deploy.yml
 
 #### Deployment requirements  
 
@@ -70,7 +70,7 @@ But also see our somewhat more complex deploy.yml
 
 Data Ingestion
 
-* OSSFinder climate projects
+* OSSFinder climate projects (more to follow)
 * Custom CSV/JSON imports
 
 Normalization
