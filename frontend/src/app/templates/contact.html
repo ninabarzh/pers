@@ -5,9 +5,9 @@
         async defer
         onload="initFriendlyCaptcha()"
         onerror="handleCaptchaLoadError()"></script>
+<script src="https://cdn.jsdelivr.net/npm/js-cookie@3.0.5/dist/js.cookie.min.js"></script>
 <script>
 // Configuration
-const BACKEND_URL = '{{ config.BACKEND_URL }}';
 let captchaSolution = '';
 let isSubmitting = false;
 
@@ -36,7 +36,6 @@ function showFeedback(message, type) {
     feedbackEl.innerHTML = `<div class="alert alert-${type}">${message}</div>`;
     feedbackEl.style.display = 'block';
 
-    // Auto-hide success messages after 5 seconds
     if (type === 'success') {
         setTimeout(() => {
             feedbackEl.style.display = 'none';
@@ -54,23 +53,35 @@ async function submitForm() {
 
     try {
         const formData = new FormData(form);
-        if (!captchaSolution) {
-            throw new Error("Please complete the captcha");
-        }
         formData.append('frc-captcha-solution', captchaSolution);
 
-        const response = await fetch(`${BACKEND_URL}/contact`, {
+        // Get CSRF token from cookie
+        const csrfToken = Cookies.get('csrftoken');
+        if (!csrfToken) {
+            throw new Error('Missing CSRF token');
+        }
+
+        // Create headers with CSRF token
+        const headers = new Headers();
+        if (csrfToken) headers.append('X-CSRFToken', csrfToken);
+
+        const response = await fetch('http://backend:8000/contact', {
             method: 'POST',
             body: formData,
             credentials: 'include',
-            headers: {
-                'Origin': window.location.origin
-            }
+              headers: {
+                'X-CSRFToken': Cookies.get('csrftoken')
+              }
         });
 
+        if (response.status === 413) {
+            throw new Error('Message too large');
+        }
+
+        const result = await response.json();
+
         if (!response.ok) {
-            const error = await response.json().catch(() => ({ detail: 'Unknown error' }));
-            throw new Error(error.detail || `HTTP error! status: ${response.status}`);
+            throw new Error(result.detail || 'Unknown error occurred');
         }
 
         showFeedback('Message sent successfully!', 'success');
@@ -97,9 +108,6 @@ async function submitForm() {
             <div id="form-feedback" class="mb-4" style="display: none;"></div>
 
             <form id="contact-form" novalidate>
-                <!-- CSRF Token -->
-                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-
                 <!-- Name -->
                 <div class="mb-3">
                     <label class="form-label">Name *</label>

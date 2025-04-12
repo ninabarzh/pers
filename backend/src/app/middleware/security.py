@@ -32,7 +32,8 @@ class CORSMiddlewareNew(BaseHTTPMiddleware):
         else:
             prod_origins = [
                 'https://finder.green',
-                'https://www.finder.green'
+                'https://www.finder.green',
+                'http://backend:8000' # Direct backend access
             ]
             if origin in prod_origins:
                 response.headers['Access-Control-Allow-Origin'] = origin
@@ -42,7 +43,7 @@ class CORSMiddlewareNew(BaseHTTPMiddleware):
             response.headers.update({
                 'Access-Control-Allow-Credentials': 'true',
                 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-                'Access-Control-Allow-Headers': 'Content-Type, X-CSRF-Token, Origin',
+                'Access-Control-Allow-Headers': 'Content-Type, X-CSRF-Token, Origin, X-CSRFToken',
                 'Access-Control-Max-Age': '600'
             })
 
@@ -97,12 +98,18 @@ class CSRFMiddlewareNew(BaseHTTPMiddleware):
         return response
 
     def _set_csrf_cookie(self, response):
-        """Helper method to set CSRF cookie with consistent settings"""
-        response.set_cookie(
-            self.cookie_name,
-            self.serializer.dumps(str(time.time())),
-            httponly=True,
-            samesite='lax',
-            secure=not os.getenv("DEBUG", "false").lower() in ('true', '1', 't'),
-            max_age=3600
-        )
+        """Sets CSRF cookie with domain handling for prod/dev"""
+        cookie_kwargs = {
+            'key': self.cookie_name,
+            'value': self.serializer.dumps(str(time.time())),
+            'httponly': True,
+            'samesite': 'lax',
+            'secure': not os.getenv("DEBUG", "false").lower() in ('true', '1', 't'),
+            'max_age': 3600
+        }
+
+        # Only set domain in production
+        if not os.getenv("DEBUG", "false").lower() in ('true', '1', 't'):
+            cookie_kwargs['domain'] = ".finder.green"
+
+        response.set_cookie(**cookie_kwargs)

@@ -12,7 +12,11 @@ async def contact_post(request: Request):
     """Simplified contact handler with explicit validation"""
     try:
         form_data = await request.form()
-        logger.info("Received form data: %s", dict(form_data))
+
+        logger.debug("CSRF Token: %s", form_data.get('csrf_token'))
+        logger.debug("SMTP Config: %s:%s",
+                     os.getenv('SMTP_SERVER'),
+                     os.getenv('SMTP_PORT'))
 
         # Debug mode bypass
         debug_mode = os.getenv('DEBUG', 'false').lower() in ('true', '1', 't')
