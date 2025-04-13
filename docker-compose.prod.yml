@@ -131,13 +131,21 @@ services:
       - "80:80"
       - "443:443"
     depends_on:
-      - backend
-      - frontend
+      certbot:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+      frontend:
+        condition: service_healthy
     command: >
-      sh -c "while [ ! -f '/etc/letsencrypt/live/finder.green/fullchain.pem' ]; do
+      sh -c '
+      echo "Waiting for SSL certificates...";
+      while [ ! -f "/etc/letsencrypt/live/finder.green/fullchain.pem" ]; do
         sleep 5;
       done;
-      nginx -g 'daemon off;'"
+      echo "Starting Nginx...";
+      nginx -t && nginx -g "daemon off;"
+      '
     networks:
       - app-network
     restart: unless-stopped
@@ -156,6 +164,12 @@ services:
     environment:
       - EMAIL=${EMAIL}
       - DOMAIN=${DOMAIN}
+    healthcheck:
+      test: [ "CMD-SHELL", "certbot certificates --noninteractive | grep -q 'VALID' || exit 1" ]
+      interval: 1m
+      timeout: 30s
+      retries: 5
+      start_period: 2m
     networks:
       - app-network
     restart: unless-stopped
