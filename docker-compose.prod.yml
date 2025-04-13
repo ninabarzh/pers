@@ -110,7 +110,10 @@ services:
           memory: 256M
           cpus: '0.3'
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8001/"]
+      test: [
+        "CMD-SHELL",
+        "curl -f http://localhost:8001/ || exit 1"
+      ]
       interval: 30s
       timeout: 10s
       retries: 3
