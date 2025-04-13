@@ -76,8 +76,11 @@ services:
       retries: 10
       start_period: 60s
     command: >
-      sh -c "sleep $${STARTUP_DELAY};
-      uvicorn src.app.main:app --host 0.0.0.0 --port 8000 --no-access-log"
+      sh -c "echo 'Waiting $${STARTUP_DELAY}s for dependencies...';
+      sleep $${STARTUP_DELAY};
+      echo 'Starting Uvicorn...';
+      uvicorn src.app.main:app --host 0.0.0.0 --port 8000 --no-access-log;
+      echo 'Uvicorn exited with status $?'"
     depends_on:
       typesense:
         condition: service_healthy
@@ -165,7 +168,7 @@ services:
       - EMAIL=${EMAIL}
       - DOMAIN=${DOMAIN}
     healthcheck:
-      test: [ "CMD-SHELL", "certbot certificates --noninteractive | grep -q 'VALID' || exit 1" ]
+      test: ["CMD-SHELL", "certbot certificates --noninteractive | grep -q 'VALID' || exit 1"]
       interval: 1m
       timeout: 30s
       retries: 5
