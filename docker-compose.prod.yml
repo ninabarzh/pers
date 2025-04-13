@@ -110,7 +110,7 @@ services:
           memory: 256M
           cpus: '0.3'
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; exit(0 if urllib.request.urlopen('http://localhost:8001/health').getcode() == 200 else 1)"]
+      test: ["CMD", "curl", "-f", "http://localhost:8001/"]
       interval: 30s
       timeout: 10s
       retries: 3
