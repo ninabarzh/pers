@@ -110,7 +110,7 @@ services:
           memory: 256M
           cpus: '0.3'
     healthcheck:
-      test: ["CMD", "python", "-c", "import socket; exit(0 if socket.create_connection(('localhost', 8001), timeout=5) else 1)"]
+      test: ["CMD", "python", "-c", "import urllib.request; exit(0 if urllib.request.urlopen('http://localhost:8001/health').getcode() == 200 else 1)"]
       interval: 30s
       timeout: 10s
       retries: 3
