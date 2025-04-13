@@ -73,6 +73,7 @@ ENV PATH="/opt/venv/bin:$PATH" \
 
 USER deploy:docker
 
+# HEALTHCHECK:
 HEALTHCHECK --interval=30s --timeout=10s \
     CMD curl -f http://localhost:8001/health || exit 1
 
