@@ -12,6 +12,9 @@ certifi==2025.1.31
     # via
     #   httpcore
     #   httpx
+    #   requests
+charset-normalizer==3.4.1
+    # via requests
 click==8.1.8
     # via uvicorn
 coverage[toml]==7.8.0
@@ -28,6 +31,7 @@ idna==3.10
     # via
     #   anyio
     #   httpx
+    #   requests
 iniconfig==2.1.0
     # via pytest
 itsdangerous==2.2.0
@@ -56,6 +60,8 @@ python-dotenv==1.0.1
     # via pers-frontend (pyproject.toml)
 python-multipart==0.0.20
     # via pers-frontend (pyproject.toml)
+requests==2.32.3
+    # via pers-frontend (pyproject.toml)
 sniffio==1.3.1
     # via anyio
 starlette==0.46.1
@@ -66,5 +72,7 @@ starlette-csrf==3.0.0
     # via pers-frontend (pyproject.toml)
 typing-extensions==4.13.1
     # via anyio
+urllib3==2.4.0
+    # via requests
 uvicorn==0.34.0
     # via pers-frontend (pyproject.toml)
