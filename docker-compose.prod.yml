@@ -110,11 +110,11 @@ services:
           memory: 256M
           cpus: '0.3'
     healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:8001/health" ]
+      test: ["CMD", "python", "-c", "import socket; exit(0 if socket.create_connection(('localhost', 8001), timeout=5) else 1)"]
       interval: 30s
       timeout: 10s
-      retries: 5
-      start_period: 20s
+      retries: 3
+      start_period: 30s
     depends_on:
       backend:
         condition: service_healthy
