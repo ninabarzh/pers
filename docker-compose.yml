@@ -36,6 +36,8 @@ services:
       context: .  # Build from project root
       dockerfile: backend/Dockerfile  # Backend-specific Dockerfile
     container_name: backend-app  # Explicit container naming
+    env_file:
+      - ./.env
     ports:
       - "${BACKEND_PORT}:8000"  # Map configured port to default backend port
     environment:
@@ -57,6 +59,7 @@ services:
       # Development mounts - overridden in production
       - ./backend/src:/app/src  # Source code mount
       - ./backend/static:/app/static  # Static files mount
+      - ./.env:/app/.env:ro
     depends_on:
       typesense:
         condition: service_healthy  # Wait for healthy Typesense
@@ -74,6 +77,8 @@ services:
       context: .  # Build from project root
       dockerfile: frontend/Dockerfile  # Frontend-specific Dockerfile
     container_name: frontend-app  # Explicit container naming
+    env_file:
+      - ./.env
     ports:
       - "${FRONTEND_PORT}:8001"  # Map configured port to default frontend port
     environment:
@@ -85,6 +90,12 @@ services:
     volumes:
       - ./frontend/src:/app/src  # Source code mount
       - ./frontend/src/app/static:/app/src/app/static  # Explicit static files mount
+      - ./.env:/app/.env:ro
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8001/health" ]
+      interval: 10s
+      timeout: 5s
+      retries: 3
     depends_on:
       - backend  # Requires backend to be available
     networks:
@@ -118,6 +129,8 @@ networks:
     driver: bridge  # Default bridge network for inter-container communication
     name: pers-network  # Add explicit name
     attachable: true
+    external: false
+    internal: false
 
 # Volume declarations
 volumes:

@@ -4,7 +4,8 @@ FROM python:3.12-slim
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONPATH=/app
 
 # Set the working directory
 WORKDIR /app
@@ -25,7 +26,7 @@ COPY backend/pyproject.toml /app/
 COPY backend/src/ /app/src/
 
 # Install the package in production mode
-RUN pip install .
+RUN pip install -e .
 
 # Copy test files
 COPY backend/tests/ /app/tests/

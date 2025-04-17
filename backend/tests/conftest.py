@@ -1,3 +1,4 @@
+# backend/src/tests/conftest.py
 import pytest
 from app.typesense_client import TypesenseClient
 from starlette.testclient import TestClient

@@ -25,6 +25,9 @@ dependencies = [
     "requests~=2.32.3",
 ]
 
+[tool.poetry.plugins."pers_backend"]
+"app" = "pers_backend.app:app"
+
 [tool.setuptools]
 packages = ["app"]
 package-dir = {"app" = "src/app"}  # Explicit package directory mapping

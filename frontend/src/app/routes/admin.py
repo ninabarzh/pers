@@ -15,7 +15,7 @@ templates = Jinja2Templates(directory=os.path.join(os.path.dirname(__file__), ".
 
 async def admin_dashboard(request: Request):
     """Main admin interface"""
-    return templates.TemplateResponse("admin.html", {"request": request})
+    return templates.TemplateResponse(request,"admin.html")
 
 
 async def handle_admin_actions(request: Request):
@@ -28,8 +28,9 @@ async def handle_admin_actions(request: Request):
 
         if not file or file.filename == "":
             return templates.TemplateResponse(
+                request,
                 "admin.html",
-                {"request": request, "error": "Please select a file to upload."},
+                {"error": "Please select a file to upload."},
             )
 
         try:
@@ -40,14 +41,16 @@ async def handle_admin_actions(request: Request):
                 data = json.loads(file_content.decode("utf-8"))
             except json.JSONDecodeError:
                 return templates.TemplateResponse(
+                    request,
                     "admin.html",
-                    {"request": request, "error": "Invalid JSON file"},
+                    {"error": "Invalid JSON file"},
                 )
 
             if not isinstance(data, list):
                 return templates.TemplateResponse(
+                    request,
                     "admin.html",
-                    {"request": request, "error": "JSON must be an array"},
+                    {"error": "JSON must be an array"},
                 )
 
             # Get backend URL from app state
@@ -64,25 +67,29 @@ async def handle_admin_actions(request: Request):
                 response.raise_for_status()
 
             return templates.TemplateResponse(
+                request,
                 "admin.html",
-                {"request": request, "success": "File processed successfully"},
+                {"success": "File processed successfully"},
             )
 
         except httpx.HTTPStatusError as e:
             logger.error(f"Backend error: {e.response.text}")
             return templates.TemplateResponse(
+                request,
                 "admin.html",
-                {"request": request, "error": f"Backend error: {e.response.text}"},
+                {"error": f"Backend error: {e.response.text}"},
             )
         except Exception as e:
             logger.error(f"Upload failed: {str(e)}")
             return templates.TemplateResponse(
+                request,
                 "admin.html",
-                {"request": request, "error": f"Error: {str(e)}"},
+                {"error": f"Error: {str(e)}"},
             )
 
     # Future admin actions can be added here
     return templates.TemplateResponse(
+        request,
         "admin.html",
-        {"request": request, "error": "Invalid admin action"},
+        {"error": "Invalid admin action"},
     )

@@ -15,10 +15,15 @@ services:
       - TYPESENSE_API_KEY=${TEST_TYPESENSE_API_KEY:-test_key}  # Test API key
       - TYPESENSE_STARTUP_WAIT_SECONDS=5
     depends_on:
-      - typesense  # Requires Typesense to be available
+      typesense:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
     command: ["./run_tests.sh"]  # Custom test runner
     networks:
-      - app-network
+      app-network:
+        aliases:
+          - backend-tests
 
   # Frontend Test Service - Development only
   frontend-tests:
@@ -31,7 +36,12 @@ services:
       - ./frontend/src:/app/src
       - ./frontend/tests:/app/tests
     depends_on:
-      - frontend  # Requires frontend to be available
+      backend:
+        condition: service_healthy
+      frontend:
+        condition: service_healthy
     command: ["./run_tests.sh"]
     networks:
-      - app-network
+      app-network:
+        aliases:
+          - frontend-tests
