@@ -12,33 +12,17 @@ from typing import Optional, Dict, Any, List
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
+# Global state for testing
+_client_instance = None
+_testing_mode = False
+
 class TypesenseClient:
-    _instance = None
-    client: Any
-    TIMEOUT_SECONDS: float
-    TYPESENSE_API_KEY: str
-    TYPESENSE_HOST: str
-    TYPESENSE_PORT: str
-    TYPESENSE_PROTOCOL: str
-
-
-    def __new__(cls):
-        if cls._instance is None:
-            cls._instance = super().__new__(cls)
-            cls._instance._initialized = False
-        return cls._instance
-
-
     def __init__(self):
-        if not self._initialized:
-            self._initialize_config()
-            try:
-                self._initialize_client()
-                self._initialized = True
-            except Exception as e:
-                logger.error(f"Typesense initialization failed: {str(e)}")
-                self.client = None
-
+        self._initialized = False
+        self.client = None
+        self._initialize_config()
+        if not _testing_mode:  # Only initialize real client in production
+            self._initialize_client()
 
     def _initialize_config(self):
         """Load configuration from environment"""
@@ -50,14 +34,27 @@ class TypesenseClient:
             logger.warning(f"No .env file found at {env_path}")
 
         self.TIMEOUT_SECONDS = float(os.getenv('TYPESENSE_TIMEOUT_SECONDS', '30'))
-        self.TYPESENSE_API_KEY = os.getenv('TYPESENSE_API_KEY', '')
+        self.TYPESENSE_API_KEY = os.getenv('TYPESENSE_API_KEY', 'test_key' if _testing_mode else '')
         self.TYPESENSE_HOST = os.getenv('TYPESENSE_HOST', 'typesense')
         self.TYPESENSE_PORT = os.getenv('TYPESENSE_PORT', '8108')
         self.TYPESENSE_PROTOCOL = os.getenv('TYPESENSE_PROTOCOL', 'http')
 
-        if not self.TYPESENSE_API_KEY:
+        if not self.TYPESENSE_API_KEY and not _testing_mode:
             raise ValueError("TYPESENSE_API_KEY is required")
 
+    def _initialize_client(self):
+        """Initialize the Typesense client with proper configuration"""
+        self.client = typesense.Client({
+            'api_key': self.TYPESENSE_API_KEY,
+            'nodes': [{
+                'host': self.TYPESENSE_HOST,
+                'port': self.TYPESENSE_PORT,
+                'protocol': self.TYPESENSE_PROTOCOL,
+                'connection_timeout_seconds': int(self.TIMEOUT_SECONDS)
+            }]
+        })
+        self.ensure_collection_exists()
+        self._initialized = True
 
     def health(self):
         """Proper health check implementation for current Typesense API"""
@@ -82,21 +79,6 @@ class TypesenseClient:
                 "status": "unavailable"
             }
 
-
-    def _initialize_client(self):
-        """Initialize the Typesense client with proper configuration"""
-        self.client = typesense.Client({
-            'api_key': self.TYPESENSE_API_KEY,
-            'nodes': [{
-                'host': self.TYPESENSE_HOST,
-                'port': self.TYPESENSE_PORT,
-                'protocol': self.TYPESENSE_PROTOCOL,
-                'connection_timeout_seconds': int(self.TIMEOUT_SECONDS)
-            }]
-        })
-        self.ensure_collection_exists()
-
-
     def _with_timeout(self, func, *args, **kwargs):
         """Wrapper to add timeout to operations"""
         start_time = time.time()
@@ -114,7 +96,6 @@ class TypesenseClient:
             f"Operation timed out after {self.TIMEOUT_SECONDS} seconds"
         ) from last_exception
 
-
     def ensure_collection_exists(self):
         """Ensure collection exists with timeout handling"""
         if not self.client:
@@ -125,7 +106,6 @@ class TypesenseClient:
         except Exception as e:
             logger.error(f"Collection verification failed: {str(e)}")
             return False
-
 
     def _ensure_collection(self):
         """Actual collection existence check"""
@@ -157,7 +137,6 @@ class TypesenseClient:
             self.client.collections.create(schema)
             logger.info(f"Created collection '{collection_name}'")
 
-
     def search(self, query: str) -> Dict:
         """Search with timeout handling"""
         return self._with_timeout(
@@ -169,11 +148,9 @@ class TypesenseClient:
             }
         )
 
-
     def index_data(self, data: List[Dict]) -> None:
         """Index data with timeout handling"""
         return self._with_timeout(self._index_data_impl, data)
-
 
     def _index_data_impl(self, data: List[Dict]) -> None:
         """Actual data indexing implementation"""
@@ -194,11 +171,9 @@ class TypesenseClient:
             except TypesenseClientError as e:
                 logger.error(f"Error indexing document {document.get('Id-repo', 'unknown')}: {e}")
 
-
     def document_exists(self, document_id: str) -> bool:
         """Check if document exists with timeout handling"""
         return self._with_timeout(self._document_exists_impl, document_id)
-
 
     def _document_exists_impl(self, document_id: str) -> bool:
         """Actual document existence check"""
@@ -208,10 +183,15 @@ class TypesenseClient:
         except ObjectNotFound:
             return False
 
-
-# Singleton instance
-client_instance = TypesenseClient()
-
 def get_typesense_client() -> TypesenseClient:
     """Get the shared Typesense client instance"""
-    return client_instance
+    global _client_instance
+    if _client_instance is None:
+        _client_instance = TypesenseClient()
+    return _client_instance
+
+def set_testing_mode(enabled: bool = True):
+    """Enable testing mode (uses mock client)"""
+    global _testing_mode, _client_instance
+    _testing_mode = enabled
+    _client_instance = None  # Reset to force recreation
