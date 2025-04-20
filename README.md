@@ -74,7 +74,7 @@ To use with GitHub Actions: `./deploy.sh`
   run: |
     ssh deploy@${{ secrets.SERVER_IP }} "cd /home/deploy/app && ./deploy.sh"
 ```
-But also see the somewhat more complex deploy.yml
+But also see the somewhat more complex [deploy.yml](https://github.com/ninabarzh/pers/blob/main/.github/workflows/deploy.yml)
 
 #### Deployment requirements  
 
