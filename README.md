@@ -32,6 +32,32 @@ This starts:
 - Search API (8000)  
 - Typesense (8108)  
 - Web UI (8001) 
+- Nginx (8080)
+
+#### Testing with Docker
+
+Running all tests
+
+```commandline
+# Backend tests
+docker-compose run --rm backend-tests
+
+# Frontend tests 
+docker-compose run --rm frontend-tests
+```
+
+Running specific tests:
+
+```commandline
+# Run single test file
+docker-compose run --rm backend-tests pytest tests/test_routes.py
+
+# Run specific test
+docker-compose run --rm backend-tests pytest tests/test_routes.py::test_search_endpoint -v
+
+# Run with debug output
+docker-compose run --rm backend-tests pytest -xvs
+```
 
 ### Production Deployment
 
