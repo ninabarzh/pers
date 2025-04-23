@@ -1,108 +1,5 @@
 {% extends "base.html" %}
 
-{% block extra_js %}
-<script src="https://unpkg.com/friendly-challenge@0.9.12/widget.module.min.js"
-        async defer
-        onload="initFriendlyCaptcha()"
-        onerror="handleCaptchaLoadError()"></script>
-<script src="https://cdn.jsdelivr.net/npm/js-cookie@3.0.5/dist/js.cookie.min.js"></script>
-<script>
-// Configuration
-let captchaSolution = '';
-let isSubmitting = false;
-
-function initFriendlyCaptcha() {
-    const widget = document.querySelector('.frc-captcha');
-    if (widget) {
-        widget.dataset.start = "none";  // Disable auto-start
-    }
-}
-
-function handleCaptchaLoadError() {
-    showFeedback('Security verification failed to load. Please refresh.', 'danger');
-}
-
-function onCaptchaVerified(solution) {
-    if (!solution) {
-        console.error("Empty captcha solution received");
-        return;
-    }
-    captchaSolution = solution;
-    document.getElementById('captcha-error').classList.add('d-none');
-}
-
-function showFeedback(message, type) {
-    const feedbackEl = document.getElementById('form-feedback');
-    feedbackEl.innerHTML = `<div class="alert alert-${type}">${message}</div>`;
-    feedbackEl.style.display = 'block';
-
-    if (type === 'success') {
-        setTimeout(() => {
-            feedbackEl.style.display = 'none';
-        }, 5000);
-    }
-}
-
-async function submitForm() {
-    if (isSubmitting) return;
-    isSubmitting = true;
-
-    const form = document.getElementById('contact-form');
-    const submitBtn = document.getElementById('submit-btn');
-    const originalBtnText = submitBtn.innerHTML;
-
-    try {
-        const formData = new FormData(form);
-        formData.append('frc-captcha-solution', captchaSolution);
-
-        // Get CSRF token from cookie
-        const csrfToken = Cookies.get('csrftoken');
-        if (!csrfToken) {
-            throw new Error('Missing CSRF token');
-        }
-
-        // Create headers with CSRF token
-        const headers = new Headers();
-        if (csrfToken) headers.append('X-CSRFToken', csrfToken);
-
-        const response = await fetch('//backend:8000/contact', {
-            method: 'POST',
-            body: formData,
-            credentials: 'include',
-              headers: {
-                'X-CSRFToken': Cookies.get('csrftoken'),
-                'Accept': 'application/json'
-              }
-        }).catch(e => {
-          console.error('Network error:', e);
-          throw new Error('Cannot connect to server');
-        });
-
-        if (response.status === 413) {
-            throw new Error('Message too large');
-        }
-
-        const result = await response.json();
-
-        if (!response.ok) {
-            throw new Error(result.detail || 'Unknown error occurred');
-        }
-
-        showFeedback('Message sent successfully!', 'success');
-        form.reset();
-        captchaSolution = '';
-    } catch (error) {
-        console.error('Submission error:', error);
-        showFeedback(error.message || 'Failed to send message', 'danger');
-    } finally {
-        submitBtn.disabled = false;
-        submitBtn.innerHTML = originalBtnText;
-        isSubmitting = false;
-    }
-}
-</script>
-{% endblock %}
-
 {% block content %}
 <div class="container py-5">
     <div class="row justify-content-center">
@@ -112,6 +9,11 @@ async function submitForm() {
             <div id="form-feedback" class="mb-4" style="display: none;"></div>
 
             <form id="contact-form" novalidate>
+                <form action="https://api.staticforms.xyz/submit" method="POST">
+                <input type="hidden" name="apiKey" value="your-api-key" />
+                <form action="https://api.staticforms.xyz/submit" method="POST">
+                <input type="hidden" name="apiKey" value="c141318b-217b-4409-9fbb-8950c451ece2" />
+
                 <!-- Name -->
                 <div class="mb-3">
                     <label class="form-label">Name *</label>
@@ -133,17 +35,15 @@ async function submitForm() {
                 <!-- Consent -->
                 <div class="mb-3 form-check">
                     <input type="checkbox" name="consent" class="form-check-input" required>
-                    <label class="form-check-label">I agree to the privacy policy *</label>
                 </div>
 
-                <!-- Captcha -->
-                <div class="frc-captcha mb-3"
-                     data-sitekey="{{ config.FRIENDLY_CAPTCHA_SITE_KEY }}"
-                     data-callback="onCaptchaVerified"
-                     data-start="none"></div>
-                <div id="captcha-error" class="text-danger d-none">
-                    Please complete the security verification
-                </div>
+                <!-- reCAPTCHA widget -->
+                  <div class="g-recaptcha" data-sitekey="6LcuXCErAAAAABGkfGzqdwQsIGyidO05xRVjn5OU"></div>
+
+                  <button type="submit">Send</button>
+
+                  <!-- Include reCAPTCHA JavaScript -->
+                  <script src="https://www.google.com/recaptcha/api.js" async defer></script>
 
                 <button type="submit" class="btn btn-primary" id="submit-btn">
                     Send Message
@@ -153,30 +53,4 @@ async function submitForm() {
     </div>
 </div>
 
-<script>
-document.getElementById('contact-form').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const form = e.target;
-
-    // Validate form
-    form.classList.add('was-validated');
-    if (!form.checkValidity()) return;
-
-    // Verify captcha
-    if (!captchaSolution) {
-        document.getElementById('captcha-error').classList.remove('d-none');
-        return;
-    }
-
-    // Update UI
-    const submitBtn = document.getElementById('submit-btn');
-    submitBtn.disabled = true;
-    submitBtn.innerHTML = `
-        <span class="spinner-border spinner-border-sm me-2"></span>
-        Sending...
-    `;
-
-    await submitForm();
-});
-</script>
 {% endblock %}
