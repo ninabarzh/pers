@@ -14,7 +14,6 @@ from .middleware.logging import RequestLoggerMiddleware
 from .typesense_client import get_typesense_client
 from .routes.search import search
 from .routes.upload import upload
-from .routes.contact import contact_post
 
 # Initialize logging
 logging.basicConfig(level=logging.DEBUG)
@@ -85,7 +84,6 @@ routes = [
     Route("/health", health_check, methods=["GET"]),
     Route("/search", search, methods=["GET"]),
     Route("/upload", upload, methods=["POST"]),
-    Route("/contact", contact_post, methods=["POST"]),
 ]
 
 if static_dir.exists():

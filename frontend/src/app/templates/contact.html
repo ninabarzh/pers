@@ -32,22 +32,17 @@
                     <textarea name="message" class="form-control" rows="5" required></textarea>
                 </div>
 
-                <!-- Consent -->
-                <div class="mb-3 form-check">
-                    <input type="checkbox" name="consent" class="form-check-input" required>
-                </div>
-
                 <!-- reCAPTCHA widget -->
                   <div class="g-recaptcha" data-sitekey="6LcuXCErAAAAABGkfGzqdwQsIGyidO05xRVjn5OU"></div>
-
-                  <button type="submit">Send</button>
+                <br>
+                <button type="submit" class="btn btn-primary" id="submit-btn">
+                    Send Message
+                </button>
 
                   <!-- Include reCAPTCHA JavaScript -->
                   <script src="https://www.google.com/recaptcha/api.js" async defer></script>
 
-                <button type="submit" class="btn btn-primary" id="submit-btn">
-                    Send Message
-                </button>
+
             </form>
         </div>
     </div>
