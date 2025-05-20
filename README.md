@@ -1,6 +1,6 @@
 # Pers - Open Sustainability Search 
 
-[![Docker Containers](https://img.shields.io/badge/Docker%20Containers-4%20services-blue?logo=docker)](https://github.com/ninabarzh/pers/blob/main/docker-compose.prod.yml) [![Deployment Status](https://img.shields.io/github/actions/workflow/status/ninabarzh/pers/deploy.yml?label=Hetzner%20Deploy&logo=hetzner)](https://github.com/ninabarzh/pers/actions/workflows/deploy.yml)(https://github.com/ninabarzh/pers/actions/workflows/docker-build.yml) [![Tea Approved](https://img.shields.io/badge/Tea%20Approved-3%20cups%20a%20day-yellowgreen)](https://github.com/ninabarzh/pers)
+[![Docker Containers](https://img.shields.io/badge/Docker%20Containers-4%20services-blue?logo=docker)](https://github.com/ninabarzh/pers/blob/main/docker-compose.prod.yml) [![Deployment Status](https://img.shields.io/github/actions/workflow/status/ninabarzh/pers/deploy.yml?label=Hetzner%20Deploy&logo=hetzner)](https://github.com/ninabarzh/pers/actions/workflows/deploy.yml) [![Tea Approved](https://img.shields.io/badge/Tea%20Approved-3%20cups%20a%20day-yellowgreen)](https://github.com/ninabarzh/pers)
 
 **Self-hosted search for greener technology, communities and houses**  
 
