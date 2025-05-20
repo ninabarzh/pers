@@ -26,22 +26,6 @@ def test_search_results_rendering(client):
     assert response.status_code == 200
     assert 'Search OSS Projects' in response.text
 
-
-# Cross-Component Tests
-def test_search_to_upload_flow(client):
-    """Test navigation between search and upload"""
-    # Start at search
-    search_response = client.get("/")
-    assert search_response.status_code == 200
-
-    # Go to upload
-    upload_response = client.get("/admin")
-    assert upload_response.status_code == 200
-
-    # Verify navigation elements
-    assert 'href="/"' in upload_response.text  # Back to search link
-
-
 # Accessibility Tests
 def test_aria_attributes(client):
     """Test accessibility features"""

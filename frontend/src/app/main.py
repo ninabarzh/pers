@@ -10,7 +10,6 @@ from starlette.config import Config
 
 # Relative route imports
 from .routes.home import home
-from .routes.admin import admin_dashboard, handle_admin_actions
 from .routes.static_pages import about, contact, privacy, terms
 
 # Initialize logging
@@ -72,8 +71,6 @@ async def health_check(request):
 routes = [
     Route("/", home, methods=["GET"]),
     Route("/health", health_check, methods=["GET"]),
-    Route("/admin", admin_dashboard, methods=["GET"]),
-    Route("/admin", handle_admin_actions, methods=["POST"]),
     Route("/about", about, methods=["GET"]),
     Route("/contact", contact, methods=["GET"]),
     Route("/privacy", privacy, methods=["GET"]),
