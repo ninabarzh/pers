@@ -1,5 +1,7 @@
 # Pers - Open Sustainability Search 
 
+[![Docker Build](https://img.shields.io/github/actions/workflow/status/ninabarzh/pers/docker-build.yml?label=Docker%20Build)](https://github.com/ninabarzh/pers/actions/workflows/docker-build.yml) [![Tea Approved](https://img.shields.io/badge/Tea%20Approved-3%20cups%20a%20day-yellowgreen)](https://github.com/ninabarzh/pers)
+
 **Self-hosted search for greener technology, communities and houses**  
 
 *Deployed at [finder.green](https://finder.green) | [Roadmap](https://github.com/ninabarzh/pers/wiki)*  
