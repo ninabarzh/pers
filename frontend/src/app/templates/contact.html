@@ -3,49 +3,50 @@
 {% block content %}
 <div class="container py-5">
     <div class="row justify-content-center">
-        <div class="col-lg-10">
+        <div class="col-lg-8">
             <h1 class="mb-4">Contact Us</h1>
 
-            <div id="form-feedback" class="mb-4" style="display: none;"></div>
-
-            <form id="contact-form" novalidate>
-                <form action="https://api.staticforms.xyz/submit" method="POST">
-                <input type="hidden" name="apiKey" value="your-api-key" />
-                <form action="https://api.staticforms.xyz/submit" method="POST">
-                <input type="hidden" name="apiKey" value="c141318b-217b-4409-9fbb-8950c451ece2" />
-
-                <!-- Name -->
-                <div class="mb-3">
-                    <label class="form-label">Name *</label>
-                    <input type="text" name="name" class="form-control" required>
+            <div class="card mb-4">
+                <div class="card-body">
+                    <h2 class="h4">
+                        <i class="bi bi-envelope-open me-2"></i>
+                        Fancy a proper chat?
+                    </h2>
+                    <p class="mb-3">
+                        If you'd prefer to send a message the old-fashioned way (well, as old-fashioned as the internet gets),
+                        the Tymyrrdin site has a lovely contact form:
+                    </p>
+                    <a href="https://tymyrddin.dev/contact/" class="btn btn-outline-primary" target="_blank">
+                        Visit Tymyrrdin's Contact Page
+                    </a>
                 </div>
+            </div>
 
-                <!-- Email -->
-                <div class="mb-3">
-                    <label class="form-label">Email *</label>
-                    <input type="email" name="email" class="form-control" required>
+            <div class="card">
+                <div class="card-body">
+                    <h2 class="h4">
+                        <i class="bi bi-github me-2"></i>
+                        Found a bug? Want to suggest an improvement?
+                    </h2>
+                    <p class="mb-3">
+                        We'd love to hear about it - though we can't promise we'll fix it while the kettle's boiling.
+                        Head over to our GitHub issues page to report it properly:
+                    </p>
+                    <a href="https://github.com/ninabarzh/pers/issues" class="btn btn-outline-dark" target="_blank">
+                        View Issues on GitHub
+                    </a>
+                    <p class="small text-muted mt-2">
+                        (Bonus points if you include how many biscuits it took you to find the issue)
+                    </p>
                 </div>
+            </div>
 
-                <!-- Message -->
-                <div class="mb-3">
-                    <label class="form-label">Message *</label>
-                    <textarea name="message" class="form-control" rows="5" required></textarea>
-                </div>
-
-                <!-- reCAPTCHA widget -->
-                  <div class="g-recaptcha" data-sitekey="6LcuXCErAAAAABGkfGzqdwQsIGyidO05xRVjn5OU"></div>
-                <br>
-                <button type="submit" class="btn btn-primary" id="submit-btn">
-                    Send Message
-                </button>
-
-                  <!-- Include reCAPTCHA JavaScript -->
-                  <script src="https://www.google.com/recaptcha/api.js" async defer></script>
-
-
-            </form>
+            <div class="alert alert-info mt-4">
+                <i class="bi bi-info-circle me-2"></i>
+                Please note: We respond to all serious inquiries, but we reserve the right to ignore
+                questions about why the tea in the office kitchen keeps disappearing.
+            </div>
         </div>
     </div>
 </div>
-
 {% endblock %}

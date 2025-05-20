@@ -26,6 +26,7 @@ def test_search_results_rendering(client):
     assert response.status_code == 200
     assert 'Search OSS Projects' in response.text
 
+
 # Accessibility Tests
 def test_aria_attributes(client):
     """Test accessibility features"""
@@ -36,3 +37,13 @@ def test_aria_attributes(client):
 
     # Check for search input's aria attributes
     assert 'aria-label="Search"' in response.text
+
+
+def test_contact_page_renders_correctly(client):
+    """Test contact page shows the new links"""
+    response = client.get("/contact")
+    assert response.status_code == 200
+    assert "Fancy a proper chat?" in response.text
+    assert "https://tymyrddin.dev/contact/" in response.text
+    assert "https://github.com/ninabarzh/pers/issues" in response.text
+    assert "biscuits" in response.text  # Testing our sense of humour

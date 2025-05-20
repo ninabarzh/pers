@@ -23,6 +23,7 @@ def get_base_context(request: Request, active_page: str = ""):
 async def about(request: Request):
     context = get_base_context(request, "about")
     return templates.TemplateResponse(
+        request,
         "about.html",
         {**context, "meta_title": "About Us - Pers"}
     )
@@ -31,17 +32,16 @@ async def about(request: Request):
 async def contact(request: Request):
     """Handle GET requests for contact page"""
     context = get_base_context(request, "contact")
-    context.update({
-        "FRIENDLY_CAPTCHA_SITE_KEY": request.app.state.config["FRIENDLY_CAPTCHA_SITE_KEY"],
-        "csrf_token": request.cookies.get("csrftoken", ""),
-        "BACKEND_URL": request.app.state.config["BACKEND_URL"]
-    })
-    return templates.TemplateResponse("contact.html", context)
-
+    return templates.TemplateResponse(
+        request,  # Request now comes first
+        "contact.html",
+        {**context, "meta_title": "Contact - Pers"}
+    )
 
 async def privacy(request: Request):
     context = get_base_context(request, "privacy")
     return templates.TemplateResponse(
+        request,
         "privacy.html",
         {**context, "meta_title": "Privacy Policy - Pers"}
     )
@@ -50,6 +50,7 @@ async def privacy(request: Request):
 async def terms(request: Request):
     context = get_base_context(request, "terms")
     return templates.TemplateResponse(
+        request,
         "terms.html",
         {**context, "meta_title": "Terms of Service - Pers"}
     )
