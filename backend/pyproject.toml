@@ -11,7 +11,7 @@ authors = [
     { name = "Nina Barzh" }
 ]
 dependencies = [
-    "starlette~=0.46.1",
+    "starlette~=0.47.2",
     "uvicorn~=0.34.0",
     "typesense~=1.0.3",
     "python-multipart~=0.0.20",
@@ -22,7 +22,7 @@ dependencies = [
     "httpx~=0.28.1",
     "python_dotenv~=1.0.1",
     "starlette_csrf~=3.0.0",
-    "requests~=2.32.3",
+    "requests~=2.32.4",
 ]
 
 [tool.poetry.plugins."pers_backend"]
