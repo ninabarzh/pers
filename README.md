@@ -88,11 +88,11 @@ But also see the somewhat more complex [deploy.yml](https://github.com/ninabarzh
 
 #### Query Syntax
 
-| Example	          | Description                         |
-|-------------------|-------------------------------------|
-| renewable energy  | Basic term matching                 |
-| [energy]	         | Field-specific search               |
-| linux ~2	         | Fuzzy match (2-character tolerance) |
+| Example	         | Description                         |
+|------------------|-------------------------------------|
+| renewable energy | Basic term matching                 |
+| \[energy]	       | Field-specific search               |
+| linux ~2	        | Fuzzy match (2-character tolerance) |
 
 #### Indexing Pipeline
 
