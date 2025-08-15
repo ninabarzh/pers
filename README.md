@@ -11,7 +11,7 @@
 ### Search Engine  
 - **Typesense** for lightning-fast, typo-tolerant search  
 - Custom ranking for sustainability metrics  
-- Real-time index updates  
+- Real-time index updates
 
 ### Stack  
 | Component       | Technology          | Purpose                          |  
