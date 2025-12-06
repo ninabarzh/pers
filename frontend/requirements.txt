@@ -72,7 +72,7 @@ starlette-csrf==3.0.0
     # via pers-frontend (pyproject.toml)
 typing-extensions==4.13.1
     # via anyio
-urllib3==2.5.0
+urllib3==2.6.0
     # via requests
 uvicorn==0.34.0
     # via pers-frontend (pyproject.toml)
